@@ -1,0 +1,36 @@
+{
+    "IsEncrypted": false,
+    "Values": {
+        "AzureWebJobsStorage": "",
+        "FUNCTIONS_WORKER_RUNTIME": "dotnet-isolated",
+        "AZURE_FUNCTIONS_ENVIRONMENT": "Development",
+
+        "DATABASE_CONNECTION_STRING": "Host=panwarhealth-db.postgres.database.azure.com;Database=postgres;Username=<USER>;Password=<PASSWORD>;Port=5432;SSL Mode=Require;Search Path=panwar_portals,public",
+
+        "JWT_SECRET": "<RUN: openssl rand -base64 64>",
+        "JWT_ISSUER": "panwar-api",
+        "JWT_AUDIENCE": "panwar-portals",
+        "JWT_EXPIRY_DAYS": "365",
+
+        "CLIENT_PORTAL_URL": "http://localhost:5173",
+        "EMPLOYEE_PORTAL_URL": "http://localhost:5174",
+
+        "EMAIL_TENANT_ID": "<COPY FROM osteo_xchange_api/local.settings.json>",
+        "EMAIL_CLIENT_ID": "<COPY FROM osteo_xchange_api/local.settings.json>",
+        "EMAIL_CLIENT_SECRET": "<COPY FROM osteo_xchange_api/local.settings.json>",
+        "EMAIL_FROM_ADDRESS": "noreply@panwarhealth.com.au",
+
+        "CLOUDFLARE_R2_ACCOUNT_ID": "<FROM CLOUDFLARE DASHBOARD>",
+        "CLOUDFLARE_R2_ACCESS_KEY": "<FROM CLOUDFLARE R2 API TOKEN>",
+        "CLOUDFLARE_R2_SECRET_KEY": "<FROM CLOUDFLARE R2 API TOKEN>",
+        "CLOUDFLARE_R2_BUCKET": "panwar-portals-media",
+
+        "ENTRA_TENANT_ID": "cf8d8b82-d1e1-44f7-a41a-941cfa7a82b1",
+        "ENTRA_EMPLOYEE_SSO_CLIENT_ID": "<FROM Panwar Portals — Employee SSO app reg>",
+        "ENTRA_EMPLOYEE_SSO_AUDIENCE": "api://<application-id-uri>"
+    },
+    "Host": {
+        "CORS": "http://localhost:5173,http://localhost:5174,https://portal.panwarhealth.com.au,https://a1.panwarhealth.com.au",
+        "CORSCredentials": true
+    }
+}

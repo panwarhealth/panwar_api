@@ -1,0 +1,40 @@
+## Build outputs
+bin/
+obj/
+publish/
+*.dll
+*.exe
+*.pdb
+
+## Azure Functions local config (contains secrets)
+local.settings.json
+
+## IDE
+.vs/
+.idea/
+.vscode/
+*.user
+*.suo
+
+## Test output
+TestResults/
+
+## NuGet
+*.nupkg
+*.snupkg
+.nuget/
+project.lock.json
+project.fragment.lock.json
+artifacts/
+
+## Logs
+*.log
+logs/
+
+## OS
+.DS_Store
+Thumbs.db
+
+## Secrets
+*.pfx
+secrets.json
