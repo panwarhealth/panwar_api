@@ -59,7 +59,8 @@ public class AuthenticationMiddleware : IFunctionsWorkerMiddleware
             var userIdClaim = principal.FindFirst(ClaimTypes.NameIdentifier)?.Value;
             var userTypeClaim = principal.FindFirst(JwtService.ClaimUserType)?.Value;
             var clientIdClaim = principal.FindFirst(JwtService.ClaimClientId)?.Value;
-            var roles = principal.FindAll(JwtService.ClaimRole).Select(c => c.Value).ToArray();
+            // JwtSecurityTokenHandler maps "role" → ClaimTypes.Role on read
+            var roles = principal.FindAll(ClaimTypes.Role).Select(c => c.Value).ToArray();
 
             if (Guid.TryParse(userIdClaim, out var userId))
             {

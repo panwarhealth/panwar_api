@@ -17,22 +17,25 @@ public static class CookieHelper
     public static void SetAuthCookie(HttpResponseData response, HttpRequestData request, string token)
     {
         var origin = GetOrigin(request);
+        var isLocalhost = origin?.Contains("localhost") == true;
 
         var parts = new List<string>
         {
             $"{CookieName}={token}",
             "HttpOnly",
-            "Secure",
             "Path=/",
             $"Max-Age={OneYearSeconds}"
         };
 
-        if (origin?.Contains("localhost") == true)
+        if (isLocalhost)
         {
-            parts.Add("SameSite=None");
+            // localhost is same-site across ports so Lax works for cross-port
+            // dev requests. No Secure flag — func start serves plain HTTP.
+            parts.Add("SameSite=Lax");
         }
         else
         {
+            parts.Add("Secure");
             parts.Add("SameSite=Lax");
             parts.Add("Domain=.panwarhealth.com.au");
         }
@@ -43,22 +46,23 @@ public static class CookieHelper
     public static void ClearAuthCookie(HttpResponseData response, HttpRequestData request)
     {
         var origin = GetOrigin(request);
+        var isLocalhost = origin?.Contains("localhost") == true;
 
         var parts = new List<string>
         {
             $"{CookieName}=",
             "HttpOnly",
-            "Secure",
             "Path=/",
             "Max-Age=0"
         };
 
-        if (origin?.Contains("localhost") == true)
+        if (isLocalhost)
         {
-            parts.Add("SameSite=None");
+            parts.Add("SameSite=Lax");
         }
         else
         {
+            parts.Add("Secure");
             parts.Add("SameSite=Lax");
             parts.Add("Domain=.panwarhealth.com.au");
         }

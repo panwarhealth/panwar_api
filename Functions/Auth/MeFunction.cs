@@ -38,7 +38,6 @@ public class MeFunction
 
             var user = await _context.Users
                 .Include(u => u.Client)
-                .Include(u => u.Roles)
                 .FirstOrDefaultAsync(u => u.Id == userId.Value);
 
             if (user is null)
@@ -56,7 +55,7 @@ public class MeFunction
                 ClientLogoUrl = user.Client?.LogoUrl,
                 ClientPrimaryColor = user.Client?.PrimaryColor,
                 ClientAccentColor = user.Client?.AccentColor,
-                Roles = user.Roles.Select(r => r.Role).ToArray()
+                Roles = req.GetRoles(context)
             });
             return response;
         }

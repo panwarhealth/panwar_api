@@ -26,11 +26,12 @@
         "CLOUDFLARE_R2_BUCKET": "panwar-portals-media",
 
         "ENTRA_TENANT_ID": "cf8d8b82-d1e1-44f7-a41a-941cfa7a82b1",
-        "ENTRA_EMPLOYEE_SSO_CLIENT_ID": "<FROM Panwar Portals — Employee SSO app reg>",
-        "ENTRA_EMPLOYEE_SSO_AUDIENCE": "api://<application-id-uri>"
+        "ENTRA_EMPLOYEE_SSO_CLIENT_ID": "479359b6-04f9-4471-9dd5-924e4365da7c",
+        "ENTRA_CLIENT_SECRET": "<FROM app reg Certificates & secrets>",
+        "ENTRA_CLIENT_SECRET_EXPIRY": "2028-04-13"
     },
     "Host": {
-        "CORS": "http://localhost:5173,http://localhost:5174,https://portal.panwarhealth.com.au,https://a1.panwarhealth.com.au",
+        "CORS": "http://localhost:5173,http://localhost:5174,https://portal.panwarhealth.com.au,https://staff.panwarhealth.com.au",
         "CORSCredentials": true
     }
 }

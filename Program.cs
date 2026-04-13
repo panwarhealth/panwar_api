@@ -67,6 +67,8 @@ var host = new HostBuilder()
         services.AddScoped<IJwtService, JwtService>();
         services.AddScoped<IMagicLinkService, MagicLinkService>();
         services.AddScoped<IEmailService, EmailService>();
+        services.AddSingleton<IEntraTokenValidator, EntraTokenValidator>();
+        services.AddSingleton<IGraphService, GraphService>();
 
         // Infrastructure
         services.AddScoped<ICloudflareR2Service, CloudflareR2Service>();
