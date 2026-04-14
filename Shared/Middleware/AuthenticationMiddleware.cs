@@ -58,7 +58,6 @@ public class AuthenticationMiddleware : IFunctionsWorkerMiddleware
         {
             var userIdClaim = principal.FindFirst(ClaimTypes.NameIdentifier)?.Value;
             var userTypeClaim = principal.FindFirst(JwtService.ClaimUserType)?.Value;
-            var clientIdClaim = principal.FindFirst(JwtService.ClaimClientId)?.Value;
             // JwtSecurityTokenHandler maps "role" → ClaimTypes.Role on read
             var roles = principal.FindAll(ClaimTypes.Role).Select(c => c.Value).ToArray();
 
@@ -70,11 +69,6 @@ public class AuthenticationMiddleware : IFunctionsWorkerMiddleware
                 if (Enum.TryParse<UserType>(userTypeClaim, ignoreCase: true, out var userType))
                 {
                     context.Items["UserType"] = userType;
-                }
-
-                if (Guid.TryParse(clientIdClaim, out var clientId))
-                {
-                    context.Items["ClientId"] = clientId;
                 }
             }
         }

@@ -1,68 +1,71 @@
 using System.Net;
 using Microsoft.Azure.Functions.Worker;
 using Microsoft.Azure.Functions.Worker.Http;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
-using Panwar.Api.Models.Enums;
+using Panwar.Api.Data;
 using Panwar.Api.Services;
+using Panwar.Api.Services.Authorization;
 using Panwar.Api.Shared.Extensions;
 
 namespace Panwar.Api.Functions.Dashboards;
 
 /// <summary>
-/// GET /api/dashboards/{brandSlug}/{audienceSlug}
+/// GET /api/dashboards/{clientSlug}/{brandSlug}/{audienceSlug}
 ///
-/// Returns the rolled-up brand × audience dashboard for the caller's client.
-/// Auth is required (cookie or bearer); the brand/audience must belong to the
-/// caller's client or the response is 404 (we deliberately don't leak whether
-/// the slugs exist for a different tenant).
+/// Policy-gated: caller must have access to the client (via role or membership).
 /// </summary>
 public class GetDashboardFunction
 {
     private readonly ILogger<GetDashboardFunction> _logger;
+    private readonly AppDbContext _context;
+    private readonly IDashboardAccessResolver _accessResolver;
     private readonly IDashboardService _dashboardService;
 
     public GetDashboardFunction(
         ILogger<GetDashboardFunction> logger,
+        AppDbContext context,
+        IDashboardAccessResolver accessResolver,
         IDashboardService dashboardService)
     {
         _logger = logger;
+        _context = context;
+        _accessResolver = accessResolver;
         _dashboardService = dashboardService;
     }
 
     [Function("GetDashboard")]
     public async Task<HttpResponseData> Run(
-        [HttpTrigger(AuthorizationLevel.Anonymous, "get", Route = "dashboards/{brandSlug}/{audienceSlug}")] HttpRequestData req,
+        [HttpTrigger(AuthorizationLevel.Anonymous, "get", Route = "dashboards/{clientSlug}/{brandSlug}/{audienceSlug}")] HttpRequestData req,
         FunctionContext context,
+        string clientSlug,
         string brandSlug,
         string audienceSlug)
     {
         try
         {
             var userId = req.GetUserId(context);
-            if (userId is null)
+            var userType = req.GetUserType(context);
+            if (userId is null || userType is null)
                 return await req.CreateUnauthorizedResponseAsync();
 
-            // Client portal endpoint: must be a Client user with a clientId.
-            // Employee/admin tooling will eventually have its own endpoint that
-            // takes the clientId as a parameter.
-            var userType = req.GetUserType(context);
-            var clientId = req.GetClientId(context);
-            if (userType != UserType.Client || clientId is null)
-                return await req.CreateForbiddenResponseAsync();
+            var ct = context.CancellationToken;
 
-            var cancellationToken = context.CancellationToken;
+            var client = await _context.Clients
+                .AsNoTracking()
+                .FirstOrDefaultAsync(c => c.Slug == clientSlug, ct);
+            if (client is null)
+                return await NotFoundAsync(req);
+
+            var canAccess = await _accessResolver.CanAccessClientAsync(
+                userId.Value, userType.Value, req.GetRoles(context), client.Id, ct);
+            if (!canAccess)
+                return await NotFoundAsync(req); // 404 not 403 — don't leak existence
+
             var dashboard = await _dashboardService.GetDashboardAsync(
-                clientId.Value,
-                brandSlug,
-                audienceSlug,
-                cancellationToken);
-
+                client.Id, brandSlug, audienceSlug, ct);
             if (dashboard is null)
-            {
-                var notFound = req.CreateResponse(HttpStatusCode.NotFound);
-                await notFound.WriteAsJsonAsync(new { error = "Dashboard not found" });
-                return notFound;
-            }
+                return await NotFoundAsync(req);
 
             var response = req.CreateResponse(HttpStatusCode.OK);
             await response.WriteAsJsonAsync(dashboard);
@@ -70,10 +73,18 @@ public class GetDashboardFunction
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to load dashboard {BrandSlug}/{AudienceSlug}", brandSlug, audienceSlug);
+            _logger.LogError(ex, "Failed to load dashboard {ClientSlug}/{BrandSlug}/{AudienceSlug}",
+                clientSlug, brandSlug, audienceSlug);
             var error = req.CreateResponse(HttpStatusCode.InternalServerError);
             await error.WriteAsJsonAsync(new { error = "Failed to load dashboard" });
             return error;
         }
+    }
+
+    private static async Task<HttpResponseData> NotFoundAsync(HttpRequestData req)
+    {
+        var resp = req.CreateResponse(HttpStatusCode.NotFound);
+        await resp.WriteAsJsonAsync(new { error = "Not found" });
+        return resp;
     }
 }

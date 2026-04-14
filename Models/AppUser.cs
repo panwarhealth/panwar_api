@@ -3,10 +3,10 @@ using Panwar.Api.Models.Enums;
 namespace Panwar.Api.Models;
 
 /// <summary>
-/// Both client users (magic-link auth, scoped to a single ClientId) and
-/// employees (Entra ID SSO, no ClientId) live in the same table. Type
-/// discriminates the two; ClientId is required for clients and null for
-/// employees, EntraId vice-versa.
+/// Both client users (magic-link auth) and employees (Entra SSO) live in this
+/// table. Type discriminates the two. Employees access all clients via their
+/// portal roles; clients have rows in user_client mapping them to one or more
+/// clients they can view.
 /// </summary>
 public class AppUser
 {
@@ -14,12 +14,11 @@ public class AppUser
     public UserType Type { get; set; }
     public required string Email { get; set; }
     public string? Name { get; set; }
-    public Guid? ClientId { get; set; }       // clients only
     public string? EntraId { get; set; }      // employees only
     public DateTime? LastLoginAt { get; set; }
     public DateTime CreatedAt { get; set; }
     public DateTime UpdatedAt { get; set; }
 
-    public Client? Client { get; set; }
+    public ICollection<UserClient> Clients { get; set; } = new List<UserClient>();
     public ICollection<UserRole> Roles { get; set; } = new List<UserRole>();
 }

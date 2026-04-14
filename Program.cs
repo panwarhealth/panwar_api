@@ -9,7 +9,7 @@ using Npgsql;
 using Panwar.Api.Data;
 using Panwar.Api.Infrastructure.CloudflareR2;
 using Panwar.Api.Services;
-using Panwar.Api.Services.Seed;
+using Panwar.Api.Services.Authorization;
 using Panwar.Api.Shared.Middleware;
 
 var host = new HostBuilder()
@@ -76,8 +76,10 @@ var host = new HostBuilder()
         // Read models for the client portal
         services.AddScoped<IDashboardService, DashboardService>();
 
-        // Seed (dev-only — temporary endpoint, will be removed once import UI exists)
-        services.AddScoped<IReckittSeedService, ReckittSeedService>();
+        // Dashboard access policies (composed by the resolver)
+        services.AddScoped<IDashboardAccessPolicy, EmployeeAccessPolicy>();
+        services.AddScoped<IDashboardAccessPolicy, ClientMembershipAccessPolicy>();
+        services.AddScoped<IDashboardAccessResolver, DashboardAccessResolver>();
     })
     .Build();
 

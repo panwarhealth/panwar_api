@@ -18,9 +18,6 @@ public static class HttpRequestDataExtensions
     public static UserType? GetUserType(this HttpRequestData _, FunctionContext context)
         => context.Items.TryGetValue("UserType", out var v) ? v as UserType? : null;
 
-    public static Guid? GetClientId(this HttpRequestData _, FunctionContext context)
-        => context.Items.TryGetValue("ClientId", out var v) ? v as Guid? : null;
-
     public static string[] GetRoles(this HttpRequestData _, FunctionContext context)
         => context.Items.TryGetValue("Roles", out var v) && v is string[] roles ? roles : Array.Empty<string>();
 

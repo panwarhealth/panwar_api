@@ -11,8 +11,8 @@ namespace Panwar.Api.Functions.Auth;
 
 /// <summary>
 /// GET /api/auth/me — returns the current user from the session cookie.
-/// SPAs call this on app load to bootstrap auth state. Returns 401 if
-/// no valid cookie is present.
+/// Client-specific fields (brands, branding, etc.) live on separate endpoints
+/// because users can now belong to multiple clients.
 /// </summary>
 public class MeFunction
 {
@@ -37,7 +37,6 @@ public class MeFunction
                 return await req.CreateUnauthorizedResponseAsync();
 
             var user = await _context.Users
-                .Include(u => u.Client)
                 .FirstOrDefaultAsync(u => u.Id == userId.Value);
 
             if (user is null)
@@ -50,11 +49,6 @@ public class MeFunction
                 Email = user.Email,
                 Name = user.Name,
                 Type = user.Type.ToString().ToLowerInvariant(),
-                ClientId = user.ClientId,
-                ClientName = user.Client?.Name,
-                ClientLogoUrl = user.Client?.LogoUrl,
-                ClientPrimaryColor = user.Client?.PrimaryColor,
-                ClientAccentColor = user.Client?.AccentColor,
                 Roles = req.GetRoles(context)
             });
             return response;

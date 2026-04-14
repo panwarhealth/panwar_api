@@ -15,7 +15,6 @@ namespace Panwar.Api.Services;
 public class JwtService : IJwtService
 {
     public const string ClaimUserType = "user_type";
-    public const string ClaimClientId = "client_id";
     public const string ClaimRole = "role";
 
     private readonly SymmetricSecurityKey _key;
@@ -33,7 +32,7 @@ public class JwtService : IJwtService
         _expiryDays = int.TryParse(configuration["JWT_EXPIRY_DAYS"], out var days) ? days : 365;
     }
 
-    public string GenerateToken(Guid userId, string email, UserType userType, Guid? clientId, IEnumerable<string> roles)
+    public string GenerateToken(Guid userId, string email, UserType userType, IEnumerable<string> roles)
     {
         var claims = new List<Claim>
         {
@@ -43,11 +42,6 @@ public class JwtService : IJwtService
             new(ClaimUserType, userType.ToString().ToLowerInvariant()),
             new(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString())
         };
-
-        if (clientId.HasValue)
-        {
-            claims.Add(new Claim(ClaimClientId, clientId.Value.ToString()));
-        }
 
         foreach (var role in roles)
         {

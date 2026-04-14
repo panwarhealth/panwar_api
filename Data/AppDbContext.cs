@@ -49,6 +49,7 @@ public class AppDbContext : DbContext
 
     // Users
     public DbSet<AppUser> Users { get; set; } = null!;
+    public DbSet<UserClient> UserClients { get; set; } = null!;
     public DbSet<MagicLink> MagicLinks { get; set; } = null!;
     public DbSet<UserRole> UserRoles { get; set; } = null!;
 
@@ -79,6 +80,7 @@ public class AppDbContext : DbContext
         ConfigureUtmLinkClicks(modelBuilder);
         ConfigureMonthSnapshot(modelBuilder);
         ConfigureAppUser(modelBuilder);
+        ConfigureUserClient(modelBuilder);
         ConfigureMagicLink(modelBuilder);
         ConfigureUserRole(modelBuilder);
         ConfigureAuditLog(modelBuilder);
@@ -368,9 +370,21 @@ public class AppDbContext : DbContext
             entity.Property(e => e.EntraId).HasMaxLength(100);
             entity.Property(e => e.CreatedAt).HasDefaultValueSql("CURRENT_TIMESTAMP");
             entity.Property(e => e.UpdatedAt).HasDefaultValueSql("CURRENT_TIMESTAMP");
-            entity.HasOne(e => e.Client).WithMany().HasForeignKey(e => e.ClientId).OnDelete(DeleteBehavior.Restrict);
             entity.HasIndex(e => e.Email).IsUnique();
             entity.HasIndex(e => e.EntraId);
+        });
+    }
+
+    private static void ConfigureUserClient(ModelBuilder modelBuilder)
+    {
+        modelBuilder.Entity<UserClient>(entity =>
+        {
+            entity.ToTable("user_client");
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.CreatedAt).HasDefaultValueSql("CURRENT_TIMESTAMP");
+            entity.HasOne(e => e.User).WithMany(u => u.Clients).HasForeignKey(e => e.UserId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(e => e.Client).WithMany().HasForeignKey(e => e.ClientId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasIndex(e => new { e.UserId, e.ClientId }).IsUnique();
         });
     }
 

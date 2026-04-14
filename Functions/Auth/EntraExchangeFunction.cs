@@ -62,10 +62,26 @@ public class EntraExchangeFunction
                 return unauthorized;
             }
 
+            // Defence-in-depth: even if a user slips past Entra's "Assignment required"
+            // gate (misconfiguration, etc.), refuse to mint a session for someone with
+            // no app roles. The Entra-side assignment rule should prevent this too, but
+            // belt and braces.
+            if (entraResult.Roles.Length == 0)
+            {
+                _logger.LogWarning("Entra exchange blocked: {Email} has no app roles assigned",
+                    entraResult.Email);
+                var forbidden = req.CreateResponse(HttpStatusCode.Forbidden);
+                await forbidden.WriteAsJsonAsync(new
+                {
+                    error = "You don't have access to the Panwar Portals. Contact an administrator."
+                });
+                return forbidden;
+            }
+
             var user = await _authService.GetOrCreateEmployeeUserAsync(
                 entraResult.ObjectId, entraResult.Email, entraResult.Name);
 
-            var token = _jwtService.GenerateToken(user.Id, user.Email, user.Type, user.ClientId, entraResult.Roles);
+            var token = _jwtService.GenerateToken(user.Id, user.Email, user.Type, entraResult.Roles);
 
             var response = req.CreateResponse(HttpStatusCode.OK);
             CookieHelper.SetAuthCookie(response, req, token);
@@ -75,7 +91,6 @@ public class EntraExchangeFunction
                 email = user.Email,
                 name = user.Name,
                 type = user.Type.ToString().ToLowerInvariant(),
-                clientId = user.ClientId,
                 roles = entraResult.Roles
             });
 
