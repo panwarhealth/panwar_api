@@ -1,49 +1,47 @@
 using Microsoft.EntityFrameworkCore;
 using Panwar.Api.Data;
+using Panwar.Api.Infrastructure.CloudflareR2;
+using Panwar.Api.Models;
 using Panwar.Api.Models.DTOs;
 using Panwar.Api.Models.Enums;
 
 namespace Panwar.Api.Services;
 
 /// <summary>
-/// Builds the brand × audience dashboard payload from the live database.
-/// One round trip pulls every placement for the requested brand × audience along
-/// with its publisher, template, KPIs and (filtered) monthly actuals; the rest
-/// is in-memory aggregation. With ~60 placements per dashboard and ~12 actuals
-/// each this is well under a millisecond's work.
+/// Builds the brand × audience dashboard payload from the live database, scoped
+/// to a month window (the global date filter). One round trip pulls every
+/// placement for the brand × audience with its publisher, template, KPIs and
+/// monthly actuals; the rest is in-memory aggregation. Artwork view URLs are
+/// minted per placement (cheap local presigning).
 /// </summary>
 public class DashboardService : IDashboardService
 {
-    // Reckitt 2025 is currently the only year of data we have. When multi-year
-    // becomes a real requirement this turns into a request parameter with a
-    // current-year default.
-    private const int Year = 2025;
+    // Fallback window only when a brand × audience has no actuals at all.
+    private const int FallbackYear = 2025;
 
     private readonly AppDbContext _context;
+    private readonly ICloudflareR2Service _r2;
 
-    public DashboardService(AppDbContext context)
+    public DashboardService(AppDbContext context, ICloudflareR2Service r2)
     {
         _context = context;
+        _r2 = r2;
     }
 
     public async Task<DashboardResponse?> GetDashboardAsync(
         Guid clientId,
         string brandSlug,
         string audienceSlug,
+        string? from,
+        string? to,
         CancellationToken cancellationToken)
     {
-        var brand = await _context.Brands
-            .AsNoTracking()
-            .FirstOrDefaultAsync(
-                b => b.ClientId == clientId && b.Slug == brandSlug,
-                cancellationToken);
+        var brand = await _context.Brands.AsNoTracking()
+            .FirstOrDefaultAsync(b => b.ClientId == clientId && b.Slug == brandSlug, cancellationToken);
         if (brand is null) return null;
 
-        var audience = await _context.Audiences
-            .AsNoTracking()
-            .FirstOrDefaultAsync(
-                a => a.ClientId == clientId && a.Slug == audienceSlug,
-                cancellationToken);
+        var audience = await _context.Audiences.AsNoTracking()
+            .FirstOrDefaultAsync(a => a.ClientId == clientId && a.Slug == audienceSlug, cancellationToken);
         if (audience is null) return null;
 
         var placements = await _context.Placements
@@ -51,97 +49,122 @@ public class DashboardService : IDashboardService
             .Include(p => p.Publisher)
             .Include(p => p.Template)
             .Include(p => p.Kpis)
-            .Include(p => p.Actuals.Where(a => a.Year == Year))
+            .Include(p => p.Actuals)
             .Where(p => p.BrandId == brand.Id && p.AudienceId == audience.Id)
             .OrderBy(p => p.Publisher.Name)
             .ThenBy(p => p.Name)
             .ToListAsync(cancellationToken);
 
-        // ── YTD totals across every placement ──────────────────────────────
-        var totalsMetrics = new Dictionary<string, decimal>();
-        foreach (var actual in placements.SelectMany(p => p.Actuals))
+        // ── Resolve the month window ───────────────────────────────────────
+        var allActuals = placements.SelectMany(p => p.Actuals).ToList();
+        int? availFromOrd = allActuals.Count > 0 ? allActuals.Min(a => PeriodWindow.Ord(a.Year, a.Month)) : null;
+        int? availToOrd = allActuals.Count > 0 ? allActuals.Max(a => PeriodWindow.Ord(a.Year, a.Month)) : null;
+
+        var fromOrd = PeriodWindow.TryParse(from, out var f) ? f : availFromOrd ?? PeriodWindow.Ord(FallbackYear, 1);
+        var toOrd = PeriodWindow.TryParse(to, out var t) ? t : availToOrd ?? PeriodWindow.Ord(FallbackYear, 12);
+        if (toOrd < fromOrd) (fromOrd, toOrd) = (toOrd, fromOrd);
+
+        bool InWindow(PlacementActual a)
         {
-            totalsMetrics.TryGetValue(actual.MetricKey, out var current);
-            totalsMetrics[actual.MetricKey] = current + actual.Value;
+            var o = PeriodWindow.Ord(a.Year, a.Month);
+            return o >= fromOrd && o <= toOrd;
         }
+
+        static void Add(Dictionary<string, decimal> acc, string key, decimal value)
+        {
+            acc.TryGetValue(key, out var cur);
+            acc[key] = cur + value;
+        }
+
+        // ── Totals (windowed actuals; period-level KPI targets) ────────────
+        var totalsMetrics = new Dictionary<string, decimal>();
+        foreach (var a in allActuals.Where(InWindow)) Add(totalsMetrics, a.MetricKey, a.Value);
+        var targetMetrics = new Dictionary<string, decimal>();
+        foreach (var k in placements.SelectMany(p => p.Kpis)) Add(targetMetrics, k.MetricKey, k.TargetValue);
 
         var totals = new DashboardTotalsDto(
             PlacementCount: placements.Count,
             MediaCost: placements.Sum(p => p.MediaCost),
-            Metrics: totalsMetrics);
+            PlannedMediaCost: placements.Any(p => p.PlannedMediaCost.HasValue) ? placements.Sum(p => p.PlannedMediaCost ?? 0) : null,
+            CpdInvestmentCost: placements.Sum(p => p.CpdInvestmentCost ?? 0),
+            Metrics: totalsMetrics,
+            TargetMetrics: targetMetrics);
 
-        // ── Per-month rollup (months 1..12 always present, zero-filled) ────
-        var monthly = new List<DashboardMonthDto>(12);
-        for (var m = 1; m <= 12; m++)
+        // ── Per-month rollup (only months inside the window) ───────────────
+        var monthly = new List<DashboardMonthDto>();
+        for (var o = fromOrd; o <= toOrd; o++)
         {
-            var monthMetrics = new Dictionary<string, decimal>();
-            foreach (var actual in placements.SelectMany(p => p.Actuals))
-            {
-                if (actual.Month != m) continue;
-                monthMetrics.TryGetValue(actual.MetricKey, out var current);
-                monthMetrics[actual.MetricKey] = current + actual.Value;
-            }
-            monthly.Add(new DashboardMonthDto(m, monthMetrics));
+            int year = o / 12, month = o % 12 + 1;
+            var mm = new Dictionary<string, decimal>();
+            foreach (var a in allActuals)
+                if (a.Year == year && a.Month == month) Add(mm, a.MetricKey, a.Value);
+            monthly.Add(new DashboardMonthDto(year, month, mm));
         }
 
         // ── Per-publisher rollup ───────────────────────────────────────────
-        // Group by PublisherId (not the Publisher entity) because AsNoTracking
-        // disables identity resolution, so two placements pointing at the same
-        // publisher row would otherwise see distinct entity instances.
         var publishers = placements
             .GroupBy(p => p.PublisherId)
             .Select(g =>
             {
                 var first = g.First().Publisher;
-                var pubMetrics = new Dictionary<string, decimal>();
-                foreach (var actual in g.SelectMany(p => p.Actuals))
-                {
-                    pubMetrics.TryGetValue(actual.MetricKey, out var current);
-                    pubMetrics[actual.MetricKey] = current + actual.Value;
-                }
+                var pm = new Dictionary<string, decimal>();
+                foreach (var a in g.SelectMany(p => p.Actuals).Where(InWindow)) Add(pm, a.MetricKey, a.Value);
+                var tm = new Dictionary<string, decimal>();
+                foreach (var k in g.SelectMany(p => p.Kpis)) Add(tm, k.MetricKey, k.TargetValue);
                 return new DashboardPublisherDto(
                     Id: first.Id,
                     Name: first.Name,
                     Slug: first.Slug,
                     PlacementCount: g.Count(),
                     MediaCost: g.Sum(p => p.MediaCost),
-                    Metrics: pubMetrics);
+                    PlannedMediaCost: g.Any(p => p.PlannedMediaCost.HasValue) ? g.Sum(p => p.PlannedMediaCost ?? 0) : null,
+                    CpdInvestmentCost: g.Sum(p => p.CpdInvestmentCost ?? 0),
+                    Metrics: pm,
+                    TargetMetrics: tm);
             })
             .OrderByDescending(p => p.MediaCost)
             .ThenBy(p => p.Name)
             .ToList();
 
-        // ── Per-placement detail ───────────────────────────────────────────
-        var placementDtos = placements
-            .Select(p =>
-            {
-                var pTotals = new Dictionary<string, decimal>();
-                foreach (var actual in p.Actuals)
-                {
-                    pTotals.TryGetValue(actual.MetricKey, out var current);
-                    pTotals[actual.MetricKey] = current + actual.Value;
-                }
-                var targets = p.Kpis.ToDictionary(k => k.MetricKey, k => k.TargetValue);
-                return new DashboardPlacementDto(
-                    Id: p.Id,
-                    Name: p.Name,
-                    Objective: p.Objective.ToString().ToLowerInvariant(),
-                    TemplateCode: TemplateCodeToString(p.Template.Code),
-                    PublisherName: p.Publisher.Name,
-                    PublisherSlug: p.Publisher.Slug,
-                    IsBonus: p.IsBonus,
-                    IsCpdPackage: p.IsCpdPackage,
-                    MediaCost: p.MediaCost,
-                    LiveMonths: p.LiveMonths,
-                    Totals: pTotals,
-                    Targets: targets);
-            })
-            .ToList();
+        // ── Per-placement detail (with presigned artwork) ──────────────────
+        var placementDtos = new List<DashboardPlacementDto>(placements.Count);
+        foreach (var p in placements)
+        {
+            var pTotals = new Dictionary<string, decimal>();
+            foreach (var a in p.Actuals.Where(InWindow)) Add(pTotals, a.MetricKey, a.Value);
+            var targets = p.Kpis.ToDictionary(k => k.MetricKey, k => k.TargetValue);
+            string? artworkViewUrl = string.IsNullOrWhiteSpace(p.ArtworkUrl)
+                ? null
+                : await _r2.GenerateDownloadUrlAsync(p.ArtworkUrl, cancellationToken);
+
+            placementDtos.Add(new DashboardPlacementDto(
+                Id: p.Id,
+                Name: p.Name,
+                Objective: p.Objective.ToString().ToLowerInvariant(),
+                TemplateCode: TemplateCodeToString(p.Template.Code),
+                PublisherName: p.Publisher.Name,
+                PublisherSlug: p.Publisher.Slug,
+                IsBonus: p.IsBonus,
+                IsCpdPackage: p.IsCpdPackage,
+                MediaCost: p.MediaCost,
+                PlannedMediaCost: p.PlannedMediaCost,
+                CpdInvestmentCost: p.CpdInvestmentCost,
+                ArtworkViewUrl: artworkViewUrl,
+                LiveMonths: p.LiveMonths,
+                Totals: pTotals,
+                Targets: targets));
+        }
+
+        var period = new DashboardPeriodDto(
+            From: PeriodWindow.ToYm(fromOrd),
+            To: PeriodWindow.ToYm(toOrd),
+            AvailableFrom: availFromOrd.HasValue ? PeriodWindow.ToYm(availFromOrd.Value) : null,
+            AvailableTo: availToOrd.HasValue ? PeriodWindow.ToYm(availToOrd.Value) : null);
 
         return new DashboardResponse(
             Brand: new DashboardBrandDto(brand.Id, brand.Name, brand.Slug),
             Audience: new DashboardAudienceDto(audience.Id, audience.Name, audience.Slug),
-            Year: Year,
+            Period: period,
             Totals: totals,
             Monthly: monthly,
             Publishers: publishers,

@@ -29,6 +29,7 @@ public class Placement
     public int[] LiveMonths { get; set; } = Array.Empty<int>();  // e.g. [3, 6] for Mar+Jun
 
     public decimal MediaCost { get; set; }
+    public decimal? PlannedMediaCost { get; set; }    // FY planned/budgeted spend (admin-entered) — for planned-vs-actual
     public decimal? CpdInvestmentCost { get; set; }   // only for placements in a CPD package
     public bool IsBonus { get; set; }
     public bool IsCpdPackage { get; set; }

@@ -74,7 +74,7 @@ public class ManagePublishersFunction
 
         var dtos = templates.Select(t => new MetricTemplateDto(
             t.Id, t.Code.ToString().ToLowerInvariant(), t.Name,
-            t.Fields.Select(f => new MetricFieldDto(f.Key, f.Label, f.Unit)).ToList()
+            t.Fields.OrderBy(f => f.SortOrder).Select(f => new MetricFieldDto(f.Key, f.Label, f.Unit, f.IsCalculated)).ToList()
         )).ToList();
 
         var resp = req.CreateResponse(HttpStatusCode.OK);

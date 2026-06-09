@@ -13,5 +13,7 @@ public interface IDashboardService
         Guid clientId,
         string brandSlug,
         string audienceSlug,
+        string? from,
+        string? to,
         CancellationToken cancellationToken);
 }

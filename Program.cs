@@ -75,6 +75,7 @@ var host = new HostBuilder()
 
         // Read models for the client portal
         services.AddScoped<IDashboardService, DashboardService>();
+        services.AddScoped<IClientSummaryService, ClientSummaryService>();
 
         // Dashboard access policies (composed by the resolver)
         services.AddScoped<IDashboardAccessPolicy, EmployeeAccessPolicy>();

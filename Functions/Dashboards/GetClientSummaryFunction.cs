@@ -11,36 +11,33 @@ using Panwar.Api.Shared.Extensions;
 namespace Panwar.Api.Functions.Dashboards;
 
 /// <summary>
-/// GET /api/dashboards/{clientSlug}/{brandSlug}/{audienceSlug}
-///
-/// Policy-gated: caller must have access to the client (via role or membership).
+/// GET /api/dashboards/{clientSlug}/summary?from=&to= — client-level overview.
+/// Policy-gated: caller must have access to the client.
 /// </summary>
-public class GetDashboardFunction
+public class GetClientSummaryFunction
 {
-    private readonly ILogger<GetDashboardFunction> _logger;
+    private readonly ILogger<GetClientSummaryFunction> _logger;
     private readonly AppDbContext _context;
     private readonly IDashboardAccessResolver _accessResolver;
-    private readonly IDashboardService _dashboardService;
+    private readonly IClientSummaryService _summaryService;
 
-    public GetDashboardFunction(
-        ILogger<GetDashboardFunction> logger,
+    public GetClientSummaryFunction(
+        ILogger<GetClientSummaryFunction> logger,
         AppDbContext context,
         IDashboardAccessResolver accessResolver,
-        IDashboardService dashboardService)
+        IClientSummaryService summaryService)
     {
         _logger = logger;
         _context = context;
         _accessResolver = accessResolver;
-        _dashboardService = dashboardService;
+        _summaryService = summaryService;
     }
 
-    [Function("GetDashboard")]
+    [Function("GetClientSummary")]
     public async Task<HttpResponseData> Run(
-        [HttpTrigger(AuthorizationLevel.Anonymous, "get", Route = "dashboards/{clientSlug}/{brandSlug}/{audienceSlug}")] HttpRequestData req,
+        [HttpTrigger(AuthorizationLevel.Anonymous, "get", Route = "dashboards/{clientSlug}/summary")] HttpRequestData req,
         FunctionContext context,
-        string clientSlug,
-        string brandSlug,
-        string audienceSlug)
+        string clientSlug)
     {
         try
         {
@@ -51,33 +48,27 @@ public class GetDashboardFunction
 
             var ct = context.CancellationToken;
 
-            var client = await _context.Clients
-                .AsNoTracking()
+            var client = await _context.Clients.AsNoTracking()
                 .FirstOrDefaultAsync(c => c.Slug == clientSlug, ct);
-            if (client is null)
-                return await NotFoundAsync(req);
+            if (client is null) return await NotFoundAsync(req);
 
             var canAccess = await _accessResolver.CanAccessClientAsync(
                 userId.Value, userType.Value, req.GetRoles(context), client.Id, ct);
-            if (!canAccess)
-                return await NotFoundAsync(req); // 404 not 403 — don't leak existence
+            if (!canAccess) return await NotFoundAsync(req); // 404 not 403 — don't leak existence
 
             var query = System.Web.HttpUtility.ParseQueryString(req.Url.Query);
-            var dashboard = await _dashboardService.GetDashboardAsync(
-                client.Id, brandSlug, audienceSlug, query["from"], query["to"], ct);
-            if (dashboard is null)
-                return await NotFoundAsync(req);
+            var summary = await _summaryService.GetSummaryAsync(client.Id, query["from"], query["to"], ct);
+            if (summary is null) return await NotFoundAsync(req);
 
             var response = req.CreateResponse(HttpStatusCode.OK);
-            await response.WriteAsJsonAsync(dashboard);
+            await response.WriteAsJsonAsync(summary);
             return response;
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to load dashboard {ClientSlug}/{BrandSlug}/{AudienceSlug}",
-                clientSlug, brandSlug, audienceSlug);
+            _logger.LogError(ex, "Failed to load client summary {ClientSlug}", clientSlug);
             var error = req.CreateResponse(HttpStatusCode.InternalServerError);
-            await error.WriteAsJsonAsync(new { error = "Failed to load dashboard" });
+            await error.WriteAsJsonAsync(new { error = "Failed to load summary" });
             return error;
         }
     }

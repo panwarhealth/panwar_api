@@ -1,20 +1,21 @@
 namespace Panwar.Api.Models.DTOs;
 
 /// <summary>
-/// Response shape for GET /api/dashboards/{brandSlug}/{audienceSlug}.
-/// One brand × one audience, with rolled-up totals, monthly breakdown, per-publisher
-/// breakdown and per-placement detail (each with their KPIs and monthly actuals).
+/// Response shape for GET /api/dashboards/{clientSlug}/{brandSlug}/{audienceSlug}.
+/// One brand × one audience, scoped to a month range (the global date filter),
+/// with rolled-up totals, a per-month breakdown, per-publisher breakdown and
+/// per-placement detail (each with actuals + KPI targets + presigned artwork).
 ///
 /// Metric values are exposed as a flexible <c>metricKey -&gt; value</c> dictionary so
 /// the response can carry whichever metrics each placement template tracks
 /// (impressions/clicks/views/sends/page_views/etc.) without a brittle column-per-metric
-/// schema. Calculated metrics like CTR/CPM/CPV are NOT pre-computed by the API — the
-/// frontend derives them from the raw fields it cares about.
+/// schema. Calculated metrics (CTR/CPM/CPC, engagement rate, cost-per-X) are derived
+/// in the frontend from the raw fields.
 /// </summary>
 public sealed record DashboardResponse(
     DashboardBrandDto Brand,
     DashboardAudienceDto Audience,
-    int Year,
+    DashboardPeriodDto Period,
     DashboardTotalsDto Totals,
     IReadOnlyList<DashboardMonthDto> Monthly,
     IReadOnlyList<DashboardPublisherDto> Publishers,
@@ -24,14 +25,25 @@ public sealed record DashboardBrandDto(Guid Id, string Name, string Slug);
 
 public sealed record DashboardAudienceDto(Guid Id, string Name, string Slug);
 
-/// <summary>YTD rollup across every placement in this brand × audience.</summary>
+/// <summary>
+/// The resolved month window for this response plus the full span of data that
+/// exists for this brand × audience (so the UI can bound the filter). All values
+/// are "YYYY-MM"; Available* are null when there are no actuals yet.
+/// </summary>
+public sealed record DashboardPeriodDto(string From, string To, string? AvailableFrom, string? AvailableTo);
+
+/// <summary>Rollup across every placement in this brand × audience, within the window.</summary>
 public sealed record DashboardTotalsDto(
     int PlacementCount,
     decimal MediaCost,
-    IReadOnlyDictionary<string, decimal> Metrics);
+    decimal? PlannedMediaCost,
+    decimal CpdInvestmentCost,
+    IReadOnlyDictionary<string, decimal> Metrics,
+    IReadOnlyDictionary<string, decimal> TargetMetrics);
 
-/// <summary>One month's totals (across every placement). Months 1..12 always present.</summary>
+/// <summary>One month's totals across every placement. Only months within the window are present.</summary>
 public sealed record DashboardMonthDto(
+    int Year,
     int Month,
     IReadOnlyDictionary<string, decimal> Metrics);
 
@@ -42,9 +54,12 @@ public sealed record DashboardPublisherDto(
     string Slug,
     int PlacementCount,
     decimal MediaCost,
-    IReadOnlyDictionary<string, decimal> Metrics);
+    decimal? PlannedMediaCost,
+    decimal CpdInvestmentCost,
+    IReadOnlyDictionary<string, decimal> Metrics,
+    IReadOnlyDictionary<string, decimal> TargetMetrics);
 
-/// <summary>One placement with its targets and YTD actuals.</summary>
+/// <summary>One placement with its windowed actuals, KPI targets and presigned artwork.</summary>
 public sealed record DashboardPlacementDto(
     Guid Id,
     string Name,
@@ -55,6 +70,9 @@ public sealed record DashboardPlacementDto(
     bool IsBonus,
     bool IsCpdPackage,
     decimal MediaCost,
+    decimal? PlannedMediaCost,
+    decimal? CpdInvestmentCost,
+    string? ArtworkViewUrl,
     int[] LiveMonths,
     IReadOnlyDictionary<string, decimal> Totals,
     IReadOnlyDictionary<string, decimal> Targets);

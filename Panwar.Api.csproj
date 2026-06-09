@@ -10,6 +10,12 @@
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
   </PropertyGroup>
   <ItemGroup>
+    <!-- scripts/ holds one-off tooling (ArtworkBackfill) with its own project — keep it out of the API build. -->
+    <Compile Remove="scripts\**\*.cs" />
+    <None Remove="scripts\**\*" />
+    <EmbeddedResource Remove="scripts\**\*" />
+  </ItemGroup>
+  <ItemGroup>
     <FrameworkReference Include="Microsoft.AspNetCore.App" />
     <PackageReference Include="AWSSDK.S3" Version="4.0.14" />
     <PackageReference Include="Microsoft.ApplicationInsights.WorkerService" Version="2.22.0" />

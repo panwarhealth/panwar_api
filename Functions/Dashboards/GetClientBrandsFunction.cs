@@ -56,12 +56,33 @@ public class GetClientBrandsFunction
             if (!canAccess)
                 return NotFoundResponse(req); // 404 not 403 — don't leak existence
 
-            var brands = await _context.Brands
+            var brandRows = await _context.Brands
                 .AsNoTracking()
                 .Where(b => b.ClientId == client.Id)
                 .OrderBy(b => b.Name)
-                .Select(b => new BrandSummaryDto(b.Id, b.Name, b.Slug))
+                .Select(b => new { b.Id, b.Name, b.Slug })
                 .ToListAsync(ct);
+
+            // Which audiences actually have placements for each brand, so the
+            // portal can land on a populated dashboard rather than an empty one.
+            var brandAudiencePairs = await _context.Placements
+                .AsNoTracking()
+                .Where(p => p.Brand.ClientId == client.Id)
+                .Select(p => new { p.BrandId, p.Audience.Name, p.Audience.Slug })
+                .Distinct()
+                .ToListAsync(ct);
+
+            var audienceSlugsByBrand = brandAudiencePairs
+                .GroupBy(x => x.BrandId)
+                .ToDictionary(
+                    g => g.Key,
+                    g => (IReadOnlyList<string>)g.OrderBy(x => x.Name).Select(x => x.Slug).ToList());
+
+            var brands = brandRows
+                .Select(b => new BrandSummaryDto(
+                    b.Id, b.Name, b.Slug,
+                    audienceSlugsByBrand.TryGetValue(b.Id, out var slugs) ? slugs : Array.Empty<string>()))
+                .ToList();
 
             var audiences = await _context.Audiences
                 .AsNoTracking()

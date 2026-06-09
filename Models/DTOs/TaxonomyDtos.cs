@@ -30,7 +30,7 @@ public sealed record MetricTemplateDto(
     string Name,
     IReadOnlyList<MetricFieldDto> Fields);
 
-public sealed record MetricFieldDto(string Key, string Label, string? Unit);
+public sealed record MetricFieldDto(string Key, string Label, string? Unit, bool IsCalculated);
 
 public class PublisherWriteRequest
 {

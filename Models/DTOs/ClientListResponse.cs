@@ -24,6 +24,11 @@ public sealed record ClientBrandsResponse(
     IReadOnlyList<BrandSummaryDto> Brands,
     IReadOnlyList<AudienceSummaryDto> Audiences);
 
-public sealed record BrandSummaryDto(Guid Id, string Name, string Slug);
+/// <summary>
+/// A brand plus the slugs of the audiences that actually have placements for it
+/// (ordered by audience name). The client portal uses the first entry to jump
+/// straight into a populated dashboard instead of an empty audience picker.
+/// </summary>
+public sealed record BrandSummaryDto(Guid Id, string Name, string Slug, IReadOnlyList<string> AudienceSlugs);
 
 public sealed record AudienceSummaryDto(Guid Id, string Name, string Slug);

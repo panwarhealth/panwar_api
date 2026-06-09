@@ -218,6 +218,7 @@ public class AppDbContext : DbContext
             entity.Property(e => e.UtmUrl).HasMaxLength(2000);
             entity.Property(e => e.ArtworkUrl).HasMaxLength(500);
             entity.Property(e => e.MediaCost).HasColumnType("numeric(12,2)");
+            entity.Property(e => e.PlannedMediaCost).HasColumnType("numeric(12,2)");
             entity.Property(e => e.CpdInvestmentCost).HasColumnType("numeric(12,2)");
             entity.Property(e => e.Circulation).HasColumnType("numeric(12,2)");
             entity.Property(e => e.LiveMonths).HasColumnType("integer[]");

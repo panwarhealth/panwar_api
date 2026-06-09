@@ -5,7 +5,8 @@
             "default": "Information",
             "Host.Results": "Information",
             "Function": "Information",
-            "Host.Aggregator": "Information"
+            "Host.Aggregator": "Information",
+            "Microsoft.Azure.WebJobs.Script.Diagnostics.HealthChecks.TelemetryHealthCheckPublisher": "Error"
         },
         "applicationInsights": {
             "samplingSettings": {
