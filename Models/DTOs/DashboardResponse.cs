@@ -74,5 +74,7 @@ public sealed record DashboardPlacementDto(
     decimal? CpdInvestmentCost,
     string? ArtworkViewUrl,
     int[] LiveMonths,
+    /// <summary>Storable metric keys in template SortOrder — use to drive display order.</summary>
+    string[] MetricKeys,
     IReadOnlyDictionary<string, decimal> Totals,
     IReadOnlyDictionary<string, decimal> Targets);

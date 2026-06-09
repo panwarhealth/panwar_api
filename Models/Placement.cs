@@ -16,6 +16,7 @@ public class Placement
     public Guid PublisherId { get; set; }
     public Guid TemplateId { get; set; }
 
+    public int Year { get; set; }                     // reporting/financial year this buy belongs to (calendar year)
     public required string Name { get; set; }
     public PlacementObjective Objective { get; set; }
     public string? AssetType { get; set; }            // banner, solus_edm, dps, ifc, etc.

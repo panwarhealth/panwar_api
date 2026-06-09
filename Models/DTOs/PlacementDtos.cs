@@ -10,6 +10,7 @@ public sealed record PlacementListItemDto(
     Guid AudienceId, string AudienceName,
     Guid PublisherId, string PublisherName,
     Guid TemplateId, string TemplateCode,
+    int Year,
     string Name,
     string Objective,
     string? AssetType,
@@ -34,6 +35,7 @@ public sealed record PlacementDetailDto(
     Guid AudienceId, string AudienceName,
     Guid PublisherId, string PublisherName,
     Guid TemplateId, string TemplateCode, string TemplateName,
+    int Year,
     string Name,
     string Objective,
     string? AssetType,
@@ -67,6 +69,7 @@ public class PlacementWriteRequest
     public Guid AudienceId { get; set; }
     public Guid PublisherId { get; set; }
     public Guid TemplateId { get; set; }
+    public int Year { get; set; }
     public string Name { get; set; } = "";
     public string Objective { get; set; } = "awareness";
     public string? AssetType { get; set; }
@@ -106,3 +109,12 @@ public class ArtworkUploadUrlRequest
 }
 
 public sealed record ArtworkUploadUrlResponse(string UploadUrl, string ObjectKey);
+
+/// <summary>Carry this year's placements forward into a new reporting year.</summary>
+public class ClonePlacementYearRequest
+{
+    public int FromYear { get; set; }
+    public int ToYear { get; set; }
+}
+
+public sealed record ClonePlacementYearResponse(int Created, int Skipped);

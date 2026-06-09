@@ -41,13 +41,20 @@ public class ClientSummaryService : IClientSummaryService
             .Where(p => p.Brand.ClientId == clientId)
             .ToListAsync(cancellationToken);
 
-        var allActuals = placements.SelectMany(p => p.Actuals).ToList();
-        int? availFromOrd = allActuals.Count > 0 ? allActuals.Min(a => PeriodWindow.Ord(a.Year, a.Month)) : null;
-        int? availToOrd = allActuals.Count > 0 ? allActuals.Max(a => PeriodWindow.Ord(a.Year, a.Month)) : null;
+        // Available span across ALL years (for the UI's presets); default window
+        // is the LATEST year only, so the headline cost is one clean reporting year.
+        var spanActuals = placements.SelectMany(p => p.Actuals).ToList();
+        int? availFromOrd = spanActuals.Count > 0 ? spanActuals.Min(a => PeriodWindow.Ord(a.Year, a.Month)) : null;
+        int? availToOrd = spanActuals.Count > 0 ? spanActuals.Max(a => PeriodWindow.Ord(a.Year, a.Month)) : null;
+        int latestYear = availToOrd.HasValue ? availToOrd.Value / 12 : FallbackYear;
 
-        var fromOrd = PeriodWindow.TryParse(from, out var f) ? f : availFromOrd ?? PeriodWindow.Ord(FallbackYear, 1);
-        var toOrd = PeriodWindow.TryParse(to, out var t) ? t : availToOrd ?? PeriodWindow.Ord(FallbackYear, 12);
+        var fromOrd = PeriodWindow.TryParse(from, out var f) ? f : PeriodWindow.Ord(latestYear, 1);
+        var toOrd = PeriodWindow.TryParse(to, out var t) ? t : PeriodWindow.Ord(latestYear, 12);
         if (toOrd < fromOrd) (fromOrd, toOrd) = (toOrd, fromOrd);
+
+        // Scope placements to the reporting year(s) the window covers.
+        int fromYear = fromOrd / 12, toYear = toOrd / 12;
+        placements = placements.Where(p => p.Year >= fromYear && p.Year <= toYear).ToList();
 
         bool InWindow(PlacementActual a)
         {

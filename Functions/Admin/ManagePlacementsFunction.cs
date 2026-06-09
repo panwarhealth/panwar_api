@@ -69,6 +69,8 @@ public class ManagePlacementsFunction
             query = query.Where(p => p.AudienceId == audienceId);
         if (Guid.TryParse(filters["publisherId"], out var publisherId))
             query = query.Where(p => p.PublisherId == publisherId);
+        if (int.TryParse(filters["year"], out var year))
+            query = query.Where(p => p.Year == year);
 
         var placements = await query
             .OrderBy(p => p.Brand.Name)
@@ -80,6 +82,7 @@ public class ManagePlacementsFunction
                 p.AudienceId, p.Audience.Name,
                 p.PublisherId, p.Publisher.Name,
                 p.TemplateId, p.Template.Code.ToString().ToLower(),
+                p.Year,
                 p.Name,
                 p.Objective.ToString().ToLower(),
                 p.AssetType,
@@ -94,8 +97,18 @@ public class ManagePlacementsFunction
                 p.IsCpdPackage))
             .ToListAsync(ct);
 
+        // All reporting years that have placements for this client (unfiltered) so
+        // the tab's year picker can populate its options.
+        var years = await _context.Placements
+            .AsNoTracking()
+            .Where(p => p.Brand.ClientId == client.Id)
+            .Select(p => p.Year)
+            .Distinct()
+            .OrderBy(y => y)
+            .ToListAsync(ct);
+
         var resp = req.CreateResponse(HttpStatusCode.OK);
-        await resp.WriteAsJsonAsync(new { placements });
+        await resp.WriteAsJsonAsync(new { placements, years });
         return resp;
     }
 
@@ -152,6 +165,7 @@ public class ManagePlacementsFunction
             AudienceId = data.AudienceId,
             PublisherId = data.PublisherId,
             TemplateId = data.TemplateId,
+            Year = data.Year,
             Name = data.Name.Trim(),
             Objective = objective,
             AssetType = Clean(data.AssetType),
@@ -235,6 +249,7 @@ public class ManagePlacementsFunction
         placement.AudienceId = data.AudienceId;
         placement.PublisherId = data.PublisherId;
         placement.TemplateId = data.TemplateId;
+        placement.Year = data.Year;
         placement.Name = data.Name.Trim();
         placement.Objective = objective;
         placement.AssetType = Clean(data.AssetType);
@@ -376,18 +391,20 @@ public class ManagePlacementsFunction
         foreach (var row in data.Actuals)
         {
             if (row.Month is < 1 or > 12) return await BadRequest(req, $"Invalid month: {row.Month}");
-            if (row.Year is < 2000 or > 2100) return await BadRequest(req, $"Invalid year: {row.Year}");
             var key = (row.MetricKey ?? "").Trim().ToLowerInvariant();
             if (key.Length == 0) return await BadRequest(req, "Each actual requires a metric key");
             if (!validKeys.Contains(key)) return await BadRequest(req, $"Metric '{key}' is not part of this placement's template");
         }
 
-        // Upsert by (year, month, metricKey). Months absent from the payload are left as-is.
+        // A placement's actuals always belong to its reporting year — stamp it,
+        // ignoring any year sent in the row. Upsert by (year, month, metricKey);
+        // months absent from the payload are left as-is.
+        var placementYear = placement.Year;
         foreach (var row in data.Actuals)
         {
             var key = row.MetricKey.Trim().ToLowerInvariant();
             var existing = placement.Actuals.FirstOrDefault(a =>
-                a.Year == row.Year && a.Month == row.Month &&
+                a.Year == placementYear && a.Month == row.Month &&
                 string.Equals(a.MetricKey, key, StringComparison.OrdinalIgnoreCase));
 
             if (existing is null)
@@ -396,7 +413,7 @@ public class ManagePlacementsFunction
                 {
                     Id = Guid.NewGuid(),
                     PlacementId = placement.Id,
-                    Year = row.Year,
+                    Year = placementYear,
                     Month = row.Month,
                     MetricKey = key,
                     Value = row.Value,
@@ -450,6 +467,110 @@ public class ManagePlacementsFunction
         return resp;
     }
 
+    // ── Clone a year forward ─────────────────────────────────────────────────
+
+    [Function("ManageClonePlacementYear")]
+    public async Task<HttpResponseData> ClonePlacementYear(
+        [HttpTrigger(AuthorizationLevel.Anonymous, "post", Route = "manage/clients/{clientSlug}/placements/clone-year")] HttpRequestData req,
+        FunctionContext context,
+        string clientSlug)
+    {
+        if (!CanManage(req, context)) return await req.CreateForbiddenResponseAsync();
+
+        var ct = context.CancellationToken;
+        var client = await _context.Clients.FirstOrDefaultAsync(c => c.Slug == clientSlug, ct);
+        if (client is null) return await NotFound(req);
+
+        var data = await ReadJson<ClonePlacementYearRequest>(req);
+        if (data is null) return await BadRequest(req, "Request body required");
+        if (data.FromYear is < 2000 or > 2100 || data.ToYear is < 2000 or > 2100)
+            return await BadRequest(req, "Invalid year");
+        if (data.FromYear == data.ToYear)
+            return await BadRequest(req, "Source and target year must differ");
+
+        var source = await _context.Placements
+            .AsNoTracking()
+            .Include(p => p.Kpis)
+            .Where(p => p.Brand.ClientId == client.Id && p.Year == data.FromYear)
+            .ToListAsync(ct);
+
+        // Existing twins in the target year (match on brand+audience+publisher+name)
+        // so re-running the clone is idempotent.
+        var existing = await _context.Placements
+            .AsNoTracking()
+            .Where(p => p.Brand.ClientId == client.Id && p.Year == data.ToYear)
+            .Select(p => new { p.BrandId, p.AudienceId, p.PublisherId, p.Name })
+            .ToListAsync(ct);
+        var taken = existing
+            .Select(e => $"{e.BrandId}|{e.AudienceId}|{e.PublisherId}|{e.Name}")
+            .ToHashSet();
+
+        var now = DateTime.UtcNow;
+        var userId = req.GetUserId(context);
+        int created = 0, skipped = 0;
+
+        foreach (var p in source)
+        {
+            if (!taken.Add($"{p.BrandId}|{p.AudienceId}|{p.PublisherId}|{p.Name}"))
+            {
+                skipped++;
+                continue;
+            }
+
+            var clone = new Placement
+            {
+                Id = Guid.NewGuid(),
+                BrandId = p.BrandId,
+                AudienceId = p.AudienceId,
+                PublisherId = p.PublisherId,
+                TemplateId = p.TemplateId,
+                Year = data.ToYear,
+                Name = p.Name,
+                Objective = p.Objective,
+                AssetType = p.AssetType,
+                CreativeCode = p.CreativeCode,
+                OsCode = p.OsCode,
+                UtmUrl = p.UtmUrl,
+                ArtworkUrl = p.ArtworkUrl,             // same creative
+                Comments = p.Comments,
+                Notes = p.Notes,
+                LiveMonths = p.LiveMonths,
+                MediaCost = 0m,                         // costs reset for the new year
+                PlannedMediaCost = p.PlannedMediaCost,  // carry the budget estimate
+                CpdInvestmentCost = null,
+                IsBonus = p.IsBonus,
+                IsCpdPackage = p.IsCpdPackage,
+                Circulation = p.Circulation,
+                PlacementsCount = p.PlacementsCount,
+                TargetCourseId = p.TargetCourseId,
+                CreatedAt = now,
+                UpdatedAt = now,
+                CreatedBy = userId,
+                UpdatedBy = userId,
+            };
+            _context.Placements.Add(clone);
+
+            // Carry KPI targets forward; no actuals.
+            foreach (var k in p.Kpis)
+            {
+                _context.PlacementKpis.Add(new PlacementKpi
+                {
+                    Id = Guid.NewGuid(),
+                    PlacementId = clone.Id,
+                    MetricKey = k.MetricKey,
+                    TargetValue = k.TargetValue,
+                });
+            }
+            created++;
+        }
+
+        await _context.SaveChangesAsync(ct);
+
+        var resp = req.CreateResponse(HttpStatusCode.OK);
+        await resp.WriteAsJsonAsync(new ClonePlacementYearResponse(created, skipped));
+        return resp;
+    }
+
     // ── helpers ──────────────────────────────────────────────────────────────
 
     /// <summary>
@@ -462,6 +583,9 @@ public class ManagePlacementsFunction
     {
         if (string.IsNullOrWhiteSpace(data.Name))
             return ("Name is required", default, Array.Empty<int>());
+
+        if (data.Year is < 2000 or > 2100)
+            return ($"Invalid year: {data.Year}", default, Array.Empty<int>());
 
         if (!Enum.TryParse<PlacementObjective>(data.Objective, ignoreCase: true, out var objective))
             return ($"Invalid objective '{data.Objective}'", default, Array.Empty<int>());
@@ -530,6 +654,7 @@ public class ManagePlacementsFunction
             p.AudienceId, p.Audience.Name,
             p.PublisherId, p.Publisher.Name,
             p.TemplateId, p.Template.Code.ToString().ToLower(), p.Template.Name,
+            p.Year,
             p.Name,
             p.Objective.ToString().ToLower(),
             p.AssetType,

@@ -40,6 +40,13 @@ public class AppDbContext : DbContext
     public DbSet<EducationCourse> EducationCourses { get; set; } = null!;
     public DbSet<EducationCourseStatus> EducationCourseStatuses { get; set; } = null!;
 
+    // Education dashboards (named pages of completion bar charts)
+    public DbSet<EducationPage> EducationPages { get; set; } = null!;
+    public DbSet<EducationChart> EducationCharts { get; set; } = null!;
+    public DbSet<EducationSeries> EducationSeries { get; set; } = null!;
+    public DbSet<EducationDataPoint> EducationDataPoints { get; set; } = null!;
+    public DbSet<EducationAnnotation> EducationAnnotations { get; set; } = null!;
+
     // UTM
     public DbSet<UtmLink> UtmLinks { get; set; } = null!;
     public DbSet<UtmLinkClicks> UtmLinkClicks { get; set; } = null!;
@@ -76,6 +83,11 @@ public class AppDbContext : DbContext
         ConfigurePlacementComment(modelBuilder);
         ConfigureEducationCourse(modelBuilder);
         ConfigureEducationCourseStatus(modelBuilder);
+        ConfigureEducationPage(modelBuilder);
+        ConfigureEducationChart(modelBuilder);
+        ConfigureEducationSeries(modelBuilder);
+        ConfigureEducationDataPoint(modelBuilder);
+        ConfigureEducationAnnotation(modelBuilder);
         ConfigureUtmLink(modelBuilder);
         ConfigureUtmLinkClicks(modelBuilder);
         ConfigureMonthSnapshot(modelBuilder);
@@ -222,6 +234,7 @@ public class AppDbContext : DbContext
             entity.Property(e => e.CpdInvestmentCost).HasColumnType("numeric(12,2)");
             entity.Property(e => e.Circulation).HasColumnType("numeric(12,2)");
             entity.Property(e => e.LiveMonths).HasColumnType("integer[]");
+            entity.Property(e => e.Year);
             entity.Property(e => e.CreatedAt).HasDefaultValueSql("CURRENT_TIMESTAMP");
             entity.Property(e => e.UpdatedAt).HasDefaultValueSql("CURRENT_TIMESTAMP");
 
@@ -235,6 +248,7 @@ public class AppDbContext : DbContext
             entity.HasIndex(e => e.AudienceId);
             entity.HasIndex(e => e.PublisherId);
             entity.HasIndex(e => e.OsCode);
+            entity.HasIndex(e => new { e.BrandId, e.AudienceId, e.Year });
         });
     }
 
@@ -308,6 +322,78 @@ public class AppDbContext : DbContext
             entity.HasKey(e => e.Id);
             entity.HasOne(e => e.Course).WithMany(c => c.MonthlyStatus).HasForeignKey(e => e.CourseId).OnDelete(DeleteBehavior.Cascade);
             entity.HasIndex(e => new { e.CourseId, e.Year, e.Month }).IsUnique();
+        });
+    }
+
+    private static void ConfigureEducationPage(ModelBuilder modelBuilder)
+    {
+        modelBuilder.Entity<EducationPage>(entity =>
+        {
+            entity.ToTable("education_page");
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Name).IsRequired().HasMaxLength(255);
+            entity.Property(e => e.Slug).IsRequired().HasMaxLength(100);
+            entity.Property(e => e.CreatedAt).HasDefaultValueSql("CURRENT_TIMESTAMP");
+            entity.Property(e => e.UpdatedAt).HasDefaultValueSql("CURRENT_TIMESTAMP");
+            entity.HasOne(e => e.Client).WithMany().HasForeignKey(e => e.ClientId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasIndex(e => new { e.ClientId, e.Slug }).IsUnique();
+        });
+    }
+
+    private static void ConfigureEducationChart(ModelBuilder modelBuilder)
+    {
+        modelBuilder.Entity<EducationChart>(entity =>
+        {
+            entity.ToTable("education_chart");
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Title).IsRequired().HasMaxLength(300);
+            entity.Property(e => e.Subtitle).HasMaxLength(500);
+            entity.Property(e => e.CreatedAt).HasDefaultValueSql("CURRENT_TIMESTAMP");
+            entity.Property(e => e.UpdatedAt).HasDefaultValueSql("CURRENT_TIMESTAMP");
+            entity.HasOne(e => e.Page).WithMany(p => p.Charts).HasForeignKey(e => e.EducationPageId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasIndex(e => e.EducationPageId);
+        });
+    }
+
+    private static void ConfigureEducationSeries(ModelBuilder modelBuilder)
+    {
+        modelBuilder.Entity<EducationSeries>(entity =>
+        {
+            entity.ToTable("education_series");
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Label).IsRequired().HasMaxLength(500);
+            entity.Property(e => e.Color).HasMaxLength(20);
+            entity.HasOne(e => e.Chart).WithMany(c => c.Series).HasForeignKey(e => e.EducationChartId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasIndex(e => e.EducationChartId);
+        });
+    }
+
+    private static void ConfigureEducationDataPoint(ModelBuilder modelBuilder)
+    {
+        modelBuilder.Entity<EducationDataPoint>(entity =>
+        {
+            entity.ToTable("education_data_point");
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Value).HasColumnType("numeric(18,4)");
+            entity.HasOne(e => e.Series).WithMany(s => s.DataPoints).HasForeignKey(e => e.EducationSeriesId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasIndex(e => new { e.EducationSeriesId, e.Year, e.Month }).IsUnique();
+        });
+    }
+
+    private static void ConfigureEducationAnnotation(ModelBuilder modelBuilder)
+    {
+        modelBuilder.Entity<EducationAnnotation>(entity =>
+        {
+            entity.ToTable("education_annotation");
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Text).IsRequired().HasMaxLength(1000);
+            entity.Property(e => e.CreatedAt).HasDefaultValueSql("CURRENT_TIMESTAMP");
+            entity.Property(e => e.UpdatedAt).HasDefaultValueSql("CURRENT_TIMESTAMP");
+            entity.HasOne(e => e.Chart).WithMany(c => c.Annotations).HasForeignKey(e => e.EducationChartId).OnDelete(DeleteBehavior.Cascade);
+            // Series delete cascades to its annotations too (Npgsql supports multiple cascade paths).
+            entity.HasOne(e => e.Series).WithMany().HasForeignKey(e => e.EducationSeriesId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(e => e.CreatedBy).WithMany().HasForeignKey(e => e.CreatedByUserId).OnDelete(DeleteBehavior.SetNull);
+            entity.HasIndex(e => e.EducationChartId);
         });
     }
 

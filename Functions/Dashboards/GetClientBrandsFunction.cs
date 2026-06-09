@@ -49,12 +49,12 @@ public class GetClientBrandsFunction
                 .AsNoTracking()
                 .FirstOrDefaultAsync(c => c.Slug == clientSlug, ct);
             if (client is null)
-                return NotFoundResponse(req);
+                return await NotFoundAsync(req);
 
             var canAccess = await _accessResolver.CanAccessClientAsync(
                 userId.Value, userType.Value, req.GetRoles(context), client.Id, ct);
             if (!canAccess)
-                return NotFoundResponse(req); // 404 not 403 — don't leak existence
+                return await NotFoundAsync(req); // 404 not 403 — don't leak existence
 
             var brandRows = await _context.Brands
                 .AsNoTracking()
@@ -109,10 +109,10 @@ public class GetClientBrandsFunction
         }
     }
 
-    private static HttpResponseData NotFoundResponse(HttpRequestData req)
+    private static async Task<HttpResponseData> NotFoundAsync(HttpRequestData req)
     {
         var resp = req.CreateResponse(HttpStatusCode.NotFound);
-        resp.WriteAsJsonAsync(new { error = "Not found" }).GetAwaiter().GetResult();
+        await resp.WriteAsJsonAsync(new { error = "Not found" });
         return resp;
     }
 }

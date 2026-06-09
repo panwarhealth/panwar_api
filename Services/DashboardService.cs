@@ -47,7 +47,7 @@ public class DashboardService : IDashboardService
         var placements = await _context.Placements
             .AsNoTracking()
             .Include(p => p.Publisher)
-            .Include(p => p.Template)
+            .Include(p => p.Template).ThenInclude(t => t.Fields)
             .Include(p => p.Kpis)
             .Include(p => p.Actuals)
             .Where(p => p.BrandId == brand.Id && p.AudienceId == audience.Id)
@@ -56,13 +56,23 @@ public class DashboardService : IDashboardService
             .ToListAsync(cancellationToken);
 
         // ── Resolve the month window ───────────────────────────────────────
-        var allActuals = placements.SelectMany(p => p.Actuals).ToList();
-        int? availFromOrd = allActuals.Count > 0 ? allActuals.Min(a => PeriodWindow.Ord(a.Year, a.Month)) : null;
-        int? availToOrd = allActuals.Count > 0 ? allActuals.Max(a => PeriodWindow.Ord(a.Year, a.Month)) : null;
+        // Available span is across ALL years (so the UI offers every year preset);
+        // the default window is the LATEST year only, so the headline cost is one
+        // clean reporting year rather than a cumulative lifetime total.
+        var spanActuals = placements.SelectMany(p => p.Actuals).ToList();
+        int? availFromOrd = spanActuals.Count > 0 ? spanActuals.Min(a => PeriodWindow.Ord(a.Year, a.Month)) : null;
+        int? availToOrd = spanActuals.Count > 0 ? spanActuals.Max(a => PeriodWindow.Ord(a.Year, a.Month)) : null;
+        int latestYear = availToOrd.HasValue ? availToOrd.Value / 12 : FallbackYear;
 
-        var fromOrd = PeriodWindow.TryParse(from, out var f) ? f : availFromOrd ?? PeriodWindow.Ord(FallbackYear, 1);
-        var toOrd = PeriodWindow.TryParse(to, out var t) ? t : availToOrd ?? PeriodWindow.Ord(FallbackYear, 12);
+        var fromOrd = PeriodWindow.TryParse(from, out var f) ? f : PeriodWindow.Ord(latestYear, 1);
+        var toOrd = PeriodWindow.TryParse(to, out var t) ? t : PeriodWindow.Ord(latestYear, 12);
         if (toOrd < fromOrd) (fromOrd, toOrd) = (toOrd, fromOrd);
+
+        // Scope placements to the reporting year(s) the window covers — cost and
+        // every rollup reflect only placements that belong to those years.
+        int fromYear = fromOrd / 12, toYear = toOrd / 12;
+        placements = placements.Where(p => p.Year >= fromYear && p.Year <= toYear).ToList();
+        var allActuals = placements.SelectMany(p => p.Actuals).ToList();
 
         bool InWindow(PlacementActual a)
         {
@@ -137,6 +147,12 @@ public class DashboardService : IDashboardService
                 ? null
                 : await _r2.GenerateDownloadUrlAsync(p.ArtworkUrl, cancellationToken);
 
+            var metricKeys = p.Template.Fields
+                .Where(f => !f.IsCalculated)
+                .OrderBy(f => f.SortOrder)
+                .Select(f => f.Key)
+                .ToArray();
+
             placementDtos.Add(new DashboardPlacementDto(
                 Id: p.Id,
                 Name: p.Name,
@@ -151,6 +167,7 @@ public class DashboardService : IDashboardService
                 CpdInvestmentCost: p.CpdInvestmentCost,
                 ArtworkViewUrl: artworkViewUrl,
                 LiveMonths: p.LiveMonths,
+                MetricKeys: metricKeys,
                 Totals: pTotals,
                 Targets: targets));
         }
