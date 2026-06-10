@@ -19,7 +19,9 @@ public sealed record DashboardResponse(
     DashboardTotalsDto Totals,
     IReadOnlyList<DashboardMonthDto> Monthly,
     IReadOnlyList<DashboardPublisherDto> Publishers,
-    IReadOnlyList<DashboardPlacementDto> Placements);
+    IReadOnlyList<DashboardPlacementDto> Placements,
+    /// <summary>True when the window has no actuals — the dashboard shows a plan, not results.</summary>
+    bool IsPlan);
 
 public sealed record DashboardBrandDto(Guid Id, string Name, string Slug);
 
@@ -59,7 +61,11 @@ public sealed record DashboardPublisherDto(
     IReadOnlyDictionary<string, decimal> Metrics,
     IReadOnlyDictionary<string, decimal> TargetMetrics);
 
-/// <summary>One placement with its windowed actuals, KPI targets and presigned artwork.</summary>
+/// <summary>
+/// One placement with its windowed actuals, KPI targets and presigned artwork.
+/// For eDMs that were duplicated across multiple sends, this is the merged card:
+/// summed actuals/targets and the list of in-window send dates.
+/// </summary>
 public sealed record DashboardPlacementDto(
     Guid Id,
     string Name,
@@ -77,4 +83,12 @@ public sealed record DashboardPlacementDto(
     /// <summary>Storable metric keys in template SortOrder — use to drive display order.</summary>
     string[] MetricKeys,
     IReadOnlyDictionary<string, decimal> Totals,
-    IReadOnlyDictionary<string, decimal> Targets);
+    IReadOnlyDictionary<string, decimal> Targets,
+    /// <summary>eDM send date / education range start ("YYYY-MM-DD"); null for LiveMonths placements.</summary>
+    string? StartDate,
+    /// <summary>Education range end ("YYYY-MM-DD"); null otherwise.</summary>
+    string? EndDate,
+    /// <summary>eDM or education sub-category (snake_case); null when not applicable.</summary>
+    string? Subcategory,
+    /// <summary>In-window send dates for a merged eDM group ("YYYY-MM-DD"), sorted; empty otherwise.</summary>
+    IReadOnlyList<string> SendDates);

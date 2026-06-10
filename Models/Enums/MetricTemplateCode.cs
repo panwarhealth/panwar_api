@@ -1,9 +1,10 @@
 namespace Panwar.Api.Models.Enums;
 
 /// <summary>
-/// The 6 metric template shapes observed in the Reckitt workbook.
-/// Each placement is typed by exactly one of these, which determines
-/// the set of metric_field rows that apply to it.
+/// The metric template shapes. Each placement is typed by exactly one of these,
+/// which determines the set of metric_field rows that apply to it. Education
+/// further splits by <see cref="EducationSubcategory"/> and eDM by
+/// <see cref="EdmSubcategory"/>.
 /// </summary>
 public enum MetricTemplateCode
 {
@@ -11,6 +12,5 @@ public enum MetricTemplateCode
     Edm = 1,
     Print = 2,
     SponsoredContent = 3,
-    EducationVideo = 4,
-    EducationCourse = 5
+    Education = 4
 }

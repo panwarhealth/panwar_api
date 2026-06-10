@@ -56,22 +56,32 @@ public class DashboardService : IDashboardService
             .ToListAsync(cancellationToken);
 
         // ── Resolve the month window ───────────────────────────────────────
-        // Available span is across ALL years (so the UI offers every year preset);
-        // the default window is the LATEST year only, so the headline cost is one
-        // clean reporting year rather than a cumulative lifetime total.
+        // Available span covers actuals AND placement live periods so a planned
+        // future year is selectable before any results land. The default window
+        // stays the latest year with ACTUALS (results, not plan), falling back to
+        // the latest planned year.
         var spanActuals = placements.SelectMany(p => p.Actuals).ToList();
-        int? availFromOrd = spanActuals.Count > 0 ? spanActuals.Min(a => PeriodWindow.Ord(a.Year, a.Month)) : null;
-        int? availToOrd = spanActuals.Count > 0 ? spanActuals.Max(a => PeriodWindow.Ord(a.Year, a.Month)) : null;
-        int latestYear = availToOrd.HasValue ? availToOrd.Value / 12 : FallbackYear;
+        var liveSpans = placements.Select(PeriodWindow.LiveSpan).ToList();
+        int? actualToOrd = spanActuals.Count > 0 ? spanActuals.Max(a => PeriodWindow.Ord(a.Year, a.Month)) : null;
+        int? availFromOrd = null, availToOrd = null;
+        if (spanActuals.Count > 0 || liveSpans.Count > 0)
+        {
+            availFromOrd = Math.Min(
+                spanActuals.Count > 0 ? spanActuals.Min(a => PeriodWindow.Ord(a.Year, a.Month)) : int.MaxValue,
+                liveSpans.Count > 0 ? liveSpans.Min(s => s.fromOrd) : int.MaxValue);
+            availToOrd = Math.Max(
+                actualToOrd ?? int.MinValue,
+                liveSpans.Count > 0 ? liveSpans.Max(s => s.toOrd) : int.MinValue);
+        }
+        int latestYear = (actualToOrd ?? availToOrd).HasValue ? (actualToOrd ?? availToOrd)!.Value / 12 : FallbackYear;
 
         var fromOrd = PeriodWindow.TryParse(from, out var f) ? f : PeriodWindow.Ord(latestYear, 1);
         var toOrd = PeriodWindow.TryParse(to, out var t) ? t : PeriodWindow.Ord(latestYear, 12);
         if (toOrd < fromOrd) (fromOrd, toOrd) = (toOrd, fromOrd);
 
-        // Scope placements to the reporting year(s) the window covers — cost and
-        // every rollup reflect only placements that belong to those years.
-        int fromYear = fromOrd / 12, toYear = toOrd / 12;
-        placements = placements.Where(p => p.Year >= fromYear && p.Year <= toYear).ToList();
+        // Presence set: placements whose metrics fall in the window (education
+        // ranges overlap; eDM sends land on a month; others by reporting year).
+        placements = placements.Where(p => PeriodWindow.AppearsInWindow(p, fromOrd, toOrd)).ToList();
         var allActuals = placements.SelectMany(p => p.Actuals).ToList();
 
         bool InWindow(PlacementActual a)
@@ -86,17 +96,39 @@ public class DashboardService : IDashboardService
             acc[key] = cur + value;
         }
 
-        // ── Totals (windowed actuals; period-level KPI targets) ────────────
+        // Annual KPI targets are pro-rated to the window per the placement's date
+        // shape, so partial windows compare like-for-like with windowed actuals.
+        Dictionary<string, decimal> WindowTargets(IEnumerable<Placement> ps)
+        {
+            var d = new Dictionary<string, decimal>();
+            foreach (var p in ps)
+            {
+                var fraction = PeriodWindow.TargetFraction(p, fromOrd, toOrd);
+                foreach (var k in p.Kpis) Add(d, k.MetricKey, k.TargetValue * fraction);
+            }
+            return d;
+        }
+
+        // Cost belongs to the booking year, so only cost-counting members
+        // contribute spend even when their metrics show across years.
+        IEnumerable<Placement> Costing(IEnumerable<Placement> ps) =>
+            ps.Where(p => PeriodWindow.CostsCountInWindow(p, fromOrd, toOrd));
+        decimal? PlannedSum(IEnumerable<Placement> ps)
+        {
+            var costing = Costing(ps).ToList();
+            return costing.Any(p => p.PlannedMediaCost.HasValue) ? costing.Sum(p => p.PlannedMediaCost ?? 0) : null;
+        }
+
+        // ── Totals (windowed actuals + pro-rated KPI targets) ──────────────
         var totalsMetrics = new Dictionary<string, decimal>();
         foreach (var a in allActuals.Where(InWindow)) Add(totalsMetrics, a.MetricKey, a.Value);
-        var targetMetrics = new Dictionary<string, decimal>();
-        foreach (var k in placements.SelectMany(p => p.Kpis)) Add(targetMetrics, k.MetricKey, k.TargetValue);
+        var targetMetrics = WindowTargets(placements);
 
         var totals = new DashboardTotalsDto(
             PlacementCount: placements.Count,
-            MediaCost: placements.Sum(p => p.MediaCost),
-            PlannedMediaCost: placements.Any(p => p.PlannedMediaCost.HasValue) ? placements.Sum(p => p.PlannedMediaCost ?? 0) : null,
-            CpdInvestmentCost: placements.Sum(p => p.CpdInvestmentCost ?? 0),
+            MediaCost: Costing(placements).Sum(p => p.MediaCost),
+            PlannedMediaCost: PlannedSum(placements),
+            CpdInvestmentCost: Costing(placements).Sum(p => p.CpdInvestmentCost ?? 0),
             Metrics: totalsMetrics,
             TargetMetrics: targetMetrics);
 
@@ -119,16 +151,15 @@ public class DashboardService : IDashboardService
                 var first = g.First().Publisher;
                 var pm = new Dictionary<string, decimal>();
                 foreach (var a in g.SelectMany(p => p.Actuals).Where(InWindow)) Add(pm, a.MetricKey, a.Value);
-                var tm = new Dictionary<string, decimal>();
-                foreach (var k in g.SelectMany(p => p.Kpis)) Add(tm, k.MetricKey, k.TargetValue);
+                var tm = WindowTargets(g);
                 return new DashboardPublisherDto(
                     Id: first.Id,
                     Name: first.Name,
                     Slug: first.Slug,
                     PlacementCount: g.Count(),
-                    MediaCost: g.Sum(p => p.MediaCost),
-                    PlannedMediaCost: g.Any(p => p.PlannedMediaCost.HasValue) ? g.Sum(p => p.PlannedMediaCost ?? 0) : null,
-                    CpdInvestmentCost: g.Sum(p => p.CpdInvestmentCost ?? 0),
+                    MediaCost: Costing(g).Sum(p => p.MediaCost),
+                    PlannedMediaCost: PlannedSum(g),
+                    CpdInvestmentCost: Costing(g).Sum(p => p.CpdInvestmentCost ?? 0),
                     Metrics: pm,
                     TargetMetrics: tm);
             })
@@ -137,39 +168,81 @@ public class DashboardService : IDashboardService
             .ToList();
 
         // ── Per-placement detail (with presigned artwork) ──────────────────
-        var placementDtos = new List<DashboardPlacementDto>(placements.Count);
-        foreach (var p in placements)
+        // Duplicated eDM sends (same GroupId) merge into one card: summed
+        // actuals/targets/costs and the list of in-window send dates. Other
+        // templates and singleton groups render one card each.
+        async Task<DashboardPlacementDto> BuildCard(Placement rep, List<Placement> members)
         {
-            var pTotals = new Dictionary<string, decimal>();
-            foreach (var a in p.Actuals.Where(InWindow)) Add(pTotals, a.MetricKey, a.Value);
-            var targets = p.Kpis.ToDictionary(k => k.MetricKey, k => k.TargetValue);
-            string? artworkViewUrl = string.IsNullOrWhiteSpace(p.ArtworkUrl)
+            var cardTotals = new Dictionary<string, decimal>();
+            foreach (var a in members.SelectMany(m => m.Actuals).Where(InWindow)) Add(cardTotals, a.MetricKey, a.Value);
+            var targets = WindowTargets(members);
+            string? artworkViewUrl = string.IsNullOrWhiteSpace(rep.ArtworkUrl)
                 ? null
-                : await _r2.GenerateDownloadUrlAsync(p.ArtworkUrl, cancellationToken);
+                : await _r2.GenerateDownloadUrlAsync(rep.ArtworkUrl, cancellationToken);
 
-            var metricKeys = p.Template.Fields
+            var metricKeys = rep.Template.Fields
                 .Where(f => !f.IsCalculated)
                 .OrderBy(f => f.SortOrder)
                 .Select(f => f.Key)
                 .ToArray();
 
-            placementDtos.Add(new DashboardPlacementDto(
-                Id: p.Id,
-                Name: p.Name,
-                Objective: p.Objective.ToString().ToLowerInvariant(),
-                TemplateCode: TemplateCodeToString(p.Template.Code),
-                PublisherName: p.Publisher.Name,
-                PublisherSlug: p.Publisher.Slug,
-                IsBonus: p.IsBonus,
-                IsCpdPackage: p.IsCpdPackage,
-                MediaCost: p.MediaCost,
-                PlannedMediaCost: p.PlannedMediaCost,
-                CpdInvestmentCost: p.CpdInvestmentCost,
+            string? subcategory = rep.Template.Code switch
+            {
+                MetricTemplateCode.Edm when rep.EdmSubcategory is { } e => PlacementEnumNames.ToName(e),
+                MetricTemplateCode.Education when rep.EducationSubcategory is { } ed => PlacementEnumNames.ToName(ed),
+                _ => null,
+            };
+
+            var sendDates = members.Count > 1
+                ? members
+                    .Where(m => m.StartDate is { } s && PeriodWindow.Ord(s) >= fromOrd && PeriodWindow.Ord(s) <= toOrd)
+                    .Select(m => m.StartDate!.Value.ToString("yyyy-MM-dd"))
+                    .OrderBy(s => s)
+                    .ToList()
+                : new List<string>();
+
+            return new DashboardPlacementDto(
+                Id: rep.GroupId ?? rep.Id,
+                Name: rep.Name,
+                Objective: rep.Objective.ToString().ToLowerInvariant(),
+                TemplateCode: TemplateCodeToString(rep.Template.Code),
+                PublisherName: rep.Publisher.Name,
+                PublisherSlug: rep.Publisher.Slug,
+                IsBonus: rep.IsBonus,
+                IsCpdPackage: rep.IsCpdPackage,
+                MediaCost: Costing(members).Sum(m => m.MediaCost),
+                PlannedMediaCost: PlannedSum(members),
+                CpdInvestmentCost: Costing(members).Sum(m => m.CpdInvestmentCost ?? 0) is var cpd && cpd > 0 ? cpd : (decimal?)null,
                 ArtworkViewUrl: artworkViewUrl,
-                LiveMonths: p.LiveMonths,
+                LiveMonths: rep.LiveMonths,
                 MetricKeys: metricKeys,
-                Totals: pTotals,
-                Targets: targets));
+                Totals: cardTotals,
+                Targets: targets,
+                StartDate: rep.StartDate?.ToString("yyyy-MM-dd"),
+                EndDate: rep.EndDate?.ToString("yyyy-MM-dd"),
+                Subcategory: subcategory,
+                SendDates: sendDates);
+        }
+
+        var placementDtos = new List<DashboardPlacementDto>(placements.Count);
+        var mergedGroups = new HashSet<Guid>();
+        foreach (var p in placements)
+        {
+            // Only eDM duplicates merge; everything else renders one card each.
+            if (p.GroupId.HasValue && p.Template.Code == MetricTemplateCode.Edm)
+            {
+                var key = p.GroupId.Value;
+                if (!mergedGroups.Add(key)) continue; // group already emitted
+                var members = placements
+                    .Where(m => m.GroupId == key && m.Template.Code == MetricTemplateCode.Edm)
+                    .OrderBy(m => m.StartDate ?? DateOnly.MaxValue)
+                    .ToList();
+                placementDtos.Add(await BuildCard(members[0], members));
+            }
+            else
+            {
+                placementDtos.Add(await BuildCard(p, new List<Placement> { p }));
+            }
         }
 
         var period = new DashboardPeriodDto(
@@ -185,7 +258,8 @@ public class DashboardService : IDashboardService
             Totals: totals,
             Monthly: monthly,
             Publishers: publishers,
-            Placements: placementDtos);
+            Placements: placementDtos,
+            IsPlan: totals.Metrics.Count == 0);
     }
 
     private static string TemplateCodeToString(MetricTemplateCode code) => code switch
@@ -194,8 +268,7 @@ public class DashboardService : IDashboardService
         MetricTemplateCode.Edm => "edm",
         MetricTemplateCode.Print => "print",
         MetricTemplateCode.SponsoredContent => "sponsored_content",
-        MetricTemplateCode.EducationVideo => "education_video",
-        MetricTemplateCode.EducationCourse => "education_course",
+        MetricTemplateCode.Education => "education",
         _ => code.ToString().ToLowerInvariant(),
     };
 }

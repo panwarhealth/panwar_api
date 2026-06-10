@@ -30,6 +30,9 @@ public class AppDbContext : DbContext
     // Baselines
     public DbSet<ClientPublisherBaseline> ClientPublisherBaselines { get; set; } = null!;
 
+    // Yearly analyst summaries
+    public DbSet<ClientYearSummary> ClientYearSummaries { get; set; } = null!;
+
     // Placements
     public DbSet<Placement> Placements { get; set; } = null!;
     public DbSet<PlacementKpi> PlacementKpis { get; set; } = null!;
@@ -77,6 +80,7 @@ public class AppDbContext : DbContext
         ConfigureMetricField(modelBuilder);
         ConfigurePublisherTemplate(modelBuilder);
         ConfigureClientPublisherBaseline(modelBuilder);
+        ConfigureClientYearSummary(modelBuilder);
         ConfigurePlacement(modelBuilder);
         ConfigurePlacementKpi(modelBuilder);
         ConfigurePlacementActual(modelBuilder);
@@ -212,7 +216,20 @@ public class AppDbContext : DbContext
             entity.HasOne(e => e.Client).WithMany().HasForeignKey(e => e.ClientId).OnDelete(DeleteBehavior.Cascade);
             entity.HasOne(e => e.Publisher).WithMany(p => p.ClientPublisherBaselines).HasForeignKey(e => e.PublisherId).OnDelete(DeleteBehavior.Restrict);
             entity.HasOne(e => e.Template).WithMany().HasForeignKey(e => e.TemplateId).OnDelete(DeleteBehavior.Restrict);
-            entity.HasIndex(e => new { e.ClientId, e.PublisherId, e.TemplateId, e.MetricKey, e.EffectiveFrom }).IsUnique();
+            entity.HasIndex(e => new { e.ClientId, e.PublisherId, e.TemplateId, e.MetricKey, e.Year }).IsUnique();
+        });
+    }
+
+    private static void ConfigureClientYearSummary(ModelBuilder modelBuilder)
+    {
+        modelBuilder.Entity<ClientYearSummary>(entity =>
+        {
+            entity.ToTable("client_year_summary");
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Text).IsRequired();
+            entity.Property(e => e.UpdatedAt).HasDefaultValueSql("CURRENT_TIMESTAMP");
+            entity.HasOne(e => e.Client).WithMany().HasForeignKey(e => e.ClientId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasIndex(e => new { e.ClientId, e.Year }).IsUnique();
         });
     }
 
@@ -224,6 +241,8 @@ public class AppDbContext : DbContext
             entity.HasKey(e => e.Id);
             entity.Property(e => e.Name).IsRequired().HasMaxLength(500);
             entity.Property(e => e.Objective).HasConversion<int>();
+            entity.Property(e => e.EdmSubcategory).HasConversion<int>();
+            entity.Property(e => e.EducationSubcategory).HasConversion<int>();
             entity.Property(e => e.AssetType).HasMaxLength(50);
             entity.Property(e => e.CreativeCode).HasMaxLength(50);
             entity.Property(e => e.OsCode).HasMaxLength(50);

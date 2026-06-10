@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 using Panwar.Api.Data;
@@ -11,9 +12,11 @@ using Panwar.Api.Data;
 namespace Panwar.Api.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    partial class AppDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260610021310_PlacementDateSemanticsAndEducationMerge")]
+    partial class PlacementDateSemanticsAndEducationMerge
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -246,6 +249,12 @@ namespace Panwar.Api.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasDefaultValueSql("CURRENT_TIMESTAMP");
 
+                    b.Property<DateOnly>("EffectiveFrom")
+                        .HasColumnType("date");
+
+                    b.Property<DateOnly?>("EffectiveTo")
+                        .HasColumnType("date");
+
                     b.Property<string>("MetricKey")
                         .IsRequired()
                         .HasMaxLength(50)
@@ -269,51 +278,16 @@ namespace Panwar.Api.Migrations
                     b.Property<decimal>("Value")
                         .HasColumnType("numeric(18,4)");
 
-                    b.Property<int>("Year")
-                        .HasColumnType("integer");
-
                     b.HasKey("Id");
 
                     b.HasIndex("PublisherId");
 
                     b.HasIndex("TemplateId");
 
-                    b.HasIndex("ClientId", "PublisherId", "TemplateId", "MetricKey", "Year")
+                    b.HasIndex("ClientId", "PublisherId", "TemplateId", "MetricKey", "EffectiveFrom")
                         .IsUnique();
 
                     b.ToTable("client_publisher_baseline", "panwar_portals");
-                });
-
-            modelBuilder.Entity("Panwar.Api.Models.ClientYearSummary", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
-
-                    b.Property<Guid>("ClientId")
-                        .HasColumnType("uuid");
-
-                    b.Property<string>("Text")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<DateTime>("UpdatedAt")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("timestamp with time zone")
-                        .HasDefaultValueSql("CURRENT_TIMESTAMP");
-
-                    b.Property<Guid?>("UpdatedByUserId")
-                        .HasColumnType("uuid");
-
-                    b.Property<int>("Year")
-                        .HasColumnType("integer");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("ClientId", "Year")
-                        .IsUnique();
-
-                    b.ToTable("client_year_summary", "panwar_portals");
                 });
 
             modelBuilder.Entity("Panwar.Api.Models.EducationAnnotation", b =>
@@ -1224,17 +1198,6 @@ namespace Panwar.Api.Migrations
                     b.Navigation("Publisher");
 
                     b.Navigation("Template");
-                });
-
-            modelBuilder.Entity("Panwar.Api.Models.ClientYearSummary", b =>
-                {
-                    b.HasOne("Panwar.Api.Models.Client", "Client")
-                        .WithMany()
-                        .HasForeignKey("ClientId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("Client");
                 });
 
             modelBuilder.Entity("Panwar.Api.Models.EducationAnnotation", b =>

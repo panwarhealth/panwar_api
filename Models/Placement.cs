@@ -20,6 +20,19 @@ public class Placement
     public required string Name { get; set; }
     public PlacementObjective Objective { get; set; }
     public string? AssetType { get; set; }            // banner, solus_edm, dps, ifc, etc.
+
+    // Date semantics vary by template:
+    //   eDM        — StartDate is the send date; EndDate is null.
+    //   Education  — StartDate..EndDate is the activity range (may span years).
+    //   others     — both null; LiveMonths is authoritative.
+    public DateOnly? StartDate { get; set; }
+    public DateOnly? EndDate { get; set; }
+    public EdmSubcategory? EdmSubcategory { get; set; }              // eDM only
+    public EducationSubcategory? EducationSubcategory { get; set; }  // Education only
+
+    // Duplicate-group key. Duplicated eDM sends share one group and are merged
+    // into a single card on the client dashboard. Group key on read = GroupId ?? Id.
+    public Guid? GroupId { get; set; }
     public string? CreativeCode { get; set; }         // "RB0686"
     public string? OsCode { get; set; }               // "RT-M-Zv9qDM" — not unique
     public string? UtmUrl { get; set; }

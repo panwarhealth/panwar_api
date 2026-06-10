@@ -46,17 +46,17 @@ public sealed record BaselineDto(
     string PublisherName,
     Guid TemplateId,
     string TemplateCode,
+    int Year,
     string MetricKey,
     decimal Value,
-    DateOnly EffectiveFrom,
     string? Note);
 
 public class BaselineWriteRequest
 {
     public Guid PublisherId { get; set; }
     public Guid TemplateId { get; set; }
+    public int Year { get; set; }
     public string MetricKey { get; set; } = "";
     public decimal Value { get; set; }
-    public DateOnly EffectiveFrom { get; set; }
     public string? Note { get; set; }
 }

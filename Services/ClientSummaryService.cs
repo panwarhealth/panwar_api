@@ -7,8 +7,9 @@ namespace Panwar.Api.Services;
 
 /// <summary>
 /// Rolls up every placement for a client into the overview payload, within a
-/// month window. Performance metrics are windowed; KPI targets and spend are
-/// period-level. All in-memory aggregation after a single load.
+/// month window. Performance metrics are windowed; KPI targets are pro-rated
+/// to the window by live-month overlap; spend is period-level. All in-memory
+/// aggregation after a single load.
 /// </summary>
 public class ClientSummaryService : IClientSummaryService
 {
@@ -41,20 +42,32 @@ public class ClientSummaryService : IClientSummaryService
             .Where(p => p.Brand.ClientId == clientId)
             .ToListAsync(cancellationToken);
 
-        // Available span across ALL years (for the UI's presets); default window
-        // is the LATEST year only, so the headline cost is one clean reporting year.
+        // Available span across ALL years (for the UI's presets), covering actuals
+        // AND placement live periods so a planned future year is selectable before
+        // any results land. The default window stays the latest year with ACTUALS
+        // (results, not plan), falling back to the latest planned year.
         var spanActuals = placements.SelectMany(p => p.Actuals).ToList();
-        int? availFromOrd = spanActuals.Count > 0 ? spanActuals.Min(a => PeriodWindow.Ord(a.Year, a.Month)) : null;
-        int? availToOrd = spanActuals.Count > 0 ? spanActuals.Max(a => PeriodWindow.Ord(a.Year, a.Month)) : null;
-        int latestYear = availToOrd.HasValue ? availToOrd.Value / 12 : FallbackYear;
+        var liveSpans = placements.Select(PeriodWindow.LiveSpan).ToList();
+        int? actualToOrd = spanActuals.Count > 0 ? spanActuals.Max(a => PeriodWindow.Ord(a.Year, a.Month)) : null;
+        int? availFromOrd = null, availToOrd = null;
+        if (spanActuals.Count > 0 || liveSpans.Count > 0)
+        {
+            availFromOrd = Math.Min(
+                spanActuals.Count > 0 ? spanActuals.Min(a => PeriodWindow.Ord(a.Year, a.Month)) : int.MaxValue,
+                liveSpans.Count > 0 ? liveSpans.Min(s => s.fromOrd) : int.MaxValue);
+            availToOrd = Math.Max(
+                actualToOrd ?? int.MinValue,
+                liveSpans.Count > 0 ? liveSpans.Max(s => s.toOrd) : int.MinValue);
+        }
+        int latestYear = (actualToOrd ?? availToOrd).HasValue ? (actualToOrd ?? availToOrd)!.Value / 12 : FallbackYear;
 
         var fromOrd = PeriodWindow.TryParse(from, out var f) ? f : PeriodWindow.Ord(latestYear, 1);
         var toOrd = PeriodWindow.TryParse(to, out var t) ? t : PeriodWindow.Ord(latestYear, 12);
         if (toOrd < fromOrd) (fromOrd, toOrd) = (toOrd, fromOrd);
 
-        // Scope placements to the reporting year(s) the window covers.
-        int fromYear = fromOrd / 12, toYear = toOrd / 12;
-        placements = placements.Where(p => p.Year >= fromYear && p.Year <= toYear).ToList();
+        // Presence set: placements whose metrics fall in the window (education
+        // ranges overlap; eDM sends land on a month; others by reporting year).
+        placements = placements.Where(p => PeriodWindow.AppearsInWindow(p, fromOrd, toOrd)).ToList();
 
         bool InWindow(PlacementActual a)
         {
@@ -73,20 +86,33 @@ public class ClientSummaryService : IClientSummaryService
             foreach (var a in ps.SelectMany(p => p.Actuals).Where(InWindow)) Add(d, a.MetricKey, a.Value);
             return d;
         }
+        // Annual KPI targets are pro-rated to the window per the placement's date
+        // shape, so partial windows compare like-for-like with windowed actuals.
         Dictionary<string, decimal> Targets(IEnumerable<Placement> ps)
         {
             var d = new Dictionary<string, decimal>();
-            foreach (var k in ps.SelectMany(p => p.Kpis)) Add(d, k.MetricKey, k.TargetValue);
+            foreach (var p in ps)
+            {
+                var fraction = PeriodWindow.TargetFraction(p, fromOrd, toOrd);
+                foreach (var k in p.Kpis) Add(d, k.MetricKey, k.TargetValue * fraction);
+            }
             return d;
         }
-        decimal? PlannedSum(IReadOnlyCollection<Placement> ps) =>
-            ps.Any(p => p.PlannedMediaCost.HasValue) ? ps.Sum(p => p.PlannedMediaCost ?? 0) : null;
+        // Cost belongs to the booking year, so only cost-counting placements
+        // contribute spend even when their metrics show across years.
+        IEnumerable<Placement> Costing(IEnumerable<Placement> ps) =>
+            ps.Where(p => PeriodWindow.CostsCountInWindow(p, fromOrd, toOrd));
+        decimal? PlannedSum(IEnumerable<Placement> ps)
+        {
+            var costing = Costing(ps).ToList();
+            return costing.Any(p => p.PlannedMediaCost.HasValue) ? costing.Sum(p => p.PlannedMediaCost ?? 0) : null;
+        }
 
         var totals = new DashboardTotalsDto(
             PlacementCount: placements.Count,
-            MediaCost: placements.Sum(p => p.MediaCost),
+            MediaCost: Costing(placements).Sum(p => p.MediaCost),
             PlannedMediaCost: PlannedSum(placements),
-            CpdInvestmentCost: placements.Sum(p => p.CpdInvestmentCost ?? 0),
+            CpdInvestmentCost: Costing(placements).Sum(p => p.CpdInvestmentCost ?? 0),
             Metrics: WindowMetrics(placements),
             TargetMetrics: Targets(placements));
 
@@ -101,9 +127,9 @@ public class ClientSummaryService : IClientSummaryService
                     BrandSlug: first.Brand.Slug,
                     AudienceSlug: first.Audience.Slug,
                     PlacementCount: list.Count,
-                    MediaCost: list.Sum(p => p.MediaCost),
+                    MediaCost: Costing(list).Sum(p => p.MediaCost),
                     PlannedMediaCost: PlannedSum(list),
-                    CpdInvestmentCost: list.Sum(p => p.CpdInvestmentCost ?? 0),
+                    CpdInvestmentCost: Costing(list).Sum(p => p.CpdInvestmentCost ?? 0),
                     Metrics: WindowMetrics(list),
                     TargetMetrics: Targets(list));
             })
@@ -120,9 +146,9 @@ public class ClientSummaryService : IClientSummaryService
                     BrandSlug: null,
                     AudienceSlug: null,
                     PlacementCount: list.Count,
-                    MediaCost: list.Sum(p => p.MediaCost),
+                    MediaCost: Costing(list).Sum(p => p.MediaCost),
                     PlannedMediaCost: PlannedSum(list),
-                    CpdInvestmentCost: list.Sum(p => p.CpdInvestmentCost ?? 0),
+                    CpdInvestmentCost: Costing(list).Sum(p => p.CpdInvestmentCost ?? 0),
                     Metrics: WindowMetrics(list),
                     TargetMetrics: Targets(list));
             })
@@ -136,11 +162,25 @@ public class ClientSummaryService : IClientSummaryService
             AvailableFrom: availFromOrd.HasValue ? PeriodWindow.ToYm(availFromOrd.Value) : null,
             AvailableTo: availToOrd.HasValue ? PeriodWindow.ToYm(availToOrd.Value) : null);
 
+        // No actuals in the window means the client is looking at a plan, not
+        // results — the UI flips to planned-spend/targets presentation.
+        var isPlan = totals.Metrics.Count == 0;
+
+        // Analyst summary for the window's end year (results summary or plan notes).
+        var summaryYear = toOrd / 12;
+        var summary = await _context.ClientYearSummaries
+            .AsNoTracking()
+            .Where(s => s.ClientId == clientId && s.Year == summaryYear)
+            .Select(s => new YearSummaryDto(s.Year, s.Text))
+            .FirstOrDefaultAsync(cancellationToken);
+
         return new ClientSummaryResponse(
             Client: new ClientSummaryClientDto(client.Id, client.Name, client.Slug),
             Period: period,
             Totals: totals,
             ByBrandAudience: byBrandAudience,
-            ByPublisher: byPublisher);
+            ByPublisher: byPublisher,
+            IsPlan: isPlan,
+            Summary: summary);
     }
 }

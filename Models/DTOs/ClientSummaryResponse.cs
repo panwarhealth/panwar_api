@@ -14,7 +14,13 @@ public sealed record ClientSummaryResponse(
     DashboardPeriodDto Period,
     DashboardTotalsDto Totals,
     IReadOnlyList<SummaryRowDto> ByBrandAudience,
-    IReadOnlyList<SummaryRowDto> ByPublisher);
+    IReadOnlyList<SummaryRowDto> ByPublisher,
+    /// <summary>True when the window has no actuals — the dashboard shows a plan, not results.</summary>
+    bool IsPlan,
+    /// <summary>Analyst-written summary for the window's end year; null when none exists.</summary>
+    YearSummaryDto? Summary);
+
+public sealed record YearSummaryDto(int Year, string Text);
 
 public sealed record ClientSummaryClientDto(Guid Id, string Name, string Slug);
 

@@ -18,6 +18,11 @@ public sealed record PlacementListItemDto(
     string? OsCode,
     string? ArtworkUrl,
     int[] LiveMonths,
+    string? StartDate,
+    string? EndDate,
+    string? EdmSubcategory,
+    string? EducationSubcategory,
+    Guid? GroupId,
     decimal MediaCost,
     decimal? PlannedMediaCost,
     decimal? CpdInvestmentCost,
@@ -47,6 +52,11 @@ public sealed record PlacementDetailDto(
     string? Comments,
     string? Notes,
     int[] LiveMonths,
+    string? StartDate,
+    string? EndDate,
+    string? EdmSubcategory,
+    string? EducationSubcategory,
+    Guid? GroupId,
     decimal MediaCost,
     decimal? PlannedMediaCost,
     decimal? CpdInvestmentCost,
@@ -80,6 +90,10 @@ public class PlacementWriteRequest
     public string? Comments { get; set; }
     public string? Notes { get; set; }
     public int[] LiveMonths { get; set; } = Array.Empty<int>();
+    public DateOnly? StartDate { get; set; }            // eDM send date / education range start
+    public DateOnly? EndDate { get; set; }              // education range end
+    public string? EdmSubcategory { get; set; }         // solus | sponsored_content | banner
+    public string? EducationSubcategory { get; set; }   // module | article | podcast_webinar | clinical_audit | research_paper | quiz
     public decimal MediaCost { get; set; }
     public decimal? PlannedMediaCost { get; set; }
     public decimal? CpdInvestmentCost { get; set; }

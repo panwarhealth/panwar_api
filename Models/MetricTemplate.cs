@@ -3,9 +3,9 @@ using Panwar.Api.Models.Enums;
 namespace Panwar.Api.Models;
 
 /// <summary>
-/// One of the 6 metric template shapes (DigitalDisplay, Edm, Print,
-/// SponsoredContent, EducationVideo, EducationCourse). Determines which
-/// metric_field rows apply to a placement of this type.
+/// One of the metric template shapes (DigitalDisplay, Edm, Print,
+/// SponsoredContent, Education). Determines which metric_field rows apply to a
+/// placement of this type.
 /// </summary>
 public class MetricTemplate
 {

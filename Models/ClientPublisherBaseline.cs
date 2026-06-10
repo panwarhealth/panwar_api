@@ -1,9 +1,10 @@
 namespace Panwar.Api.Models;
 
 /// <summary>
-/// Per-client negotiated baselines: e.g. "for Reckitt, AJP digital banner
-/// impressions baseline is 175,560 per month at $0.0013 CTR target".
-/// These default into placement KPIs on creation; editors can override.
+/// Year-scoped KPI targets per (client, publisher, template, metric): e.g.
+/// "for Reckitt 2026, AJP digital banner impressions target is 175,560".
+/// Clients hand these over before the year starts; they default into placement
+/// KPIs on creation for that year, and editors can override per placement.
 /// </summary>
 public class ClientPublisherBaseline
 {
@@ -11,10 +12,9 @@ public class ClientPublisherBaseline
     public Guid ClientId { get; set; }
     public Guid PublisherId { get; set; }
     public Guid TemplateId { get; set; }
+    public int Year { get; set; }
     public required string MetricKey { get; set; }
     public decimal Value { get; set; }
-    public DateOnly EffectiveFrom { get; set; }
-    public DateOnly? EffectiveTo { get; set; }
     public string? Note { get; set; }
     public DateTime CreatedAt { get; set; }
     public DateTime UpdatedAt { get; set; }
