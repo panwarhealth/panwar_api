@@ -45,3 +45,31 @@ public sealed class EducationAnnotationWriteRequest
     public int Month { get; set; }
     public string? Text { get; set; }
 }
+
+/// <summary>Create/update an education asset (one row of the page's detail table).</summary>
+public sealed class EducationAssetWriteRequest
+{
+    public string? GroupLabel { get; set; }
+    public string? Brand { get; set; }
+    public string? Type { get; set; }
+    public string? Title { get; set; }
+    public string? Author { get; set; }
+    public DateOnly? Expiry { get; set; }
+    /// <summary>On update, true clears the expiry (a null Expiry alone means "unchanged").</summary>
+    public bool? ClearExpiry { get; set; }
+    public int? SortOrder { get; set; }
+}
+
+public sealed class EducationAssetValueWrite
+{
+    public string Status { get; set; } = "";
+    public int Year { get; set; }
+    public int Month { get; set; }
+    public decimal Value { get; set; }
+}
+
+/// <summary>Full replace of an asset's monthly status values.</summary>
+public sealed class EducationAssetValuesRequest
+{
+    public List<EducationAssetValueWrite> Values { get; set; } = new();
+}

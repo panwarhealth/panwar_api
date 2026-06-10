@@ -166,6 +166,35 @@ public class ClientSummaryService : IClientSummaryService
         // results — the UI flips to planned-spend/targets presentation.
         var isPlan = totals.Metrics.Count == 0;
 
+        // Monthly series per brand for the overview's brand chart. Skipped when
+        // the client has the chart off or the window is a plan (no actuals).
+        var monthlyByBrand = new List<BrandMonthlyDto>();
+        if (client.ShowBrandMonthlyChart && !isPlan)
+        {
+            monthlyByBrand = placements
+                .GroupBy(p => p.BrandId)
+                .Select(g => new
+                {
+                    g.First().Brand,
+                    Months = (IReadOnlyList<DashboardMonthDto>)g
+                        .SelectMany(p => p.Actuals)
+                        .Where(InWindow)
+                        .GroupBy(a => (a.Year, a.Month))
+                        .OrderBy(m => PeriodWindow.Ord(m.Key.Year, m.Key.Month))
+                        .Select(m =>
+                        {
+                            var d = new Dictionary<string, decimal>();
+                            foreach (var a in m) Add(d, a.MetricKey, a.Value);
+                            return new DashboardMonthDto(m.Key.Year, m.Key.Month, d);
+                        })
+                        .ToList(),
+                })
+                .Where(b => b.Months.Count > 0)
+                .OrderBy(b => b.Brand.Name)
+                .Select(b => new BrandMonthlyDto(b.Brand.Name, b.Brand.Slug, b.Months))
+                .ToList();
+        }
+
         // Analyst summary for the window's end year (results summary or plan notes).
         var summaryYear = toOrd / 12;
         var summary = await _context.ClientYearSummaries
@@ -181,6 +210,9 @@ public class ClientSummaryService : IClientSummaryService
             ByBrandAudience: byBrandAudience,
             ByPublisher: byPublisher,
             IsPlan: isPlan,
-            Summary: summary);
+            Summary: summary,
+            ShowBrandMonthlyChart: client.ShowBrandMonthlyChart,
+            ShowPublisherChart: client.ShowPublisherChart,
+            MonthlyByBrand: monthlyByBrand);
     }
 }

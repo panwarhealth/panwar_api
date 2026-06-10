@@ -18,4 +18,5 @@ public class EducationPage
 
     public Client Client { get; set; } = null!;
     public ICollection<EducationChart> Charts { get; set; } = new List<EducationChart>();
+    public ICollection<EducationAsset> Assets { get; set; } = new List<EducationAsset>();
 }

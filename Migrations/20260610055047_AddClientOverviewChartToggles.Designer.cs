@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 using Panwar.Api.Data;
@@ -11,9 +12,11 @@ using Panwar.Api.Data;
 namespace Panwar.Api.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    partial class AppDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260610055047_AddClientOverviewChartToggles")]
+    partial class AddClientOverviewChartToggles
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -371,81 +374,6 @@ namespace Panwar.Api.Migrations
                     b.HasIndex("EducationSeriesId");
 
                     b.ToTable("education_annotation", "panwar_portals");
-                });
-
-            modelBuilder.Entity("Panwar.Api.Models.EducationAsset", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
-
-                    b.Property<string>("Author")
-                        .HasMaxLength(255)
-                        .HasColumnType("character varying(255)");
-
-                    b.Property<string>("Brand")
-                        .HasMaxLength(100)
-                        .HasColumnType("character varying(100)");
-
-                    b.Property<Guid>("EducationPageId")
-                        .HasColumnType("uuid");
-
-                    b.Property<DateOnly?>("Expiry")
-                        .HasColumnType("date");
-
-                    b.Property<string>("GroupLabel")
-                        .IsRequired()
-                        .HasMaxLength(100)
-                        .HasColumnType("character varying(100)");
-
-                    b.Property<int>("SortOrder")
-                        .HasColumnType("integer");
-
-                    b.Property<string>("Title")
-                        .IsRequired()
-                        .HasMaxLength(500)
-                        .HasColumnType("character varying(500)");
-
-                    b.Property<string>("Type")
-                        .HasMaxLength(50)
-                        .HasColumnType("character varying(50)");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("EducationPageId");
-
-                    b.ToTable("education_asset", "panwar_portals");
-                });
-
-            modelBuilder.Entity("Panwar.Api.Models.EducationAssetValue", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
-
-                    b.Property<Guid>("EducationAssetId")
-                        .HasColumnType("uuid");
-
-                    b.Property<int>("Month")
-                        .HasColumnType("integer");
-
-                    b.Property<string>("Status")
-                        .IsRequired()
-                        .HasMaxLength(50)
-                        .HasColumnType("character varying(50)");
-
-                    b.Property<decimal>("Value")
-                        .HasColumnType("numeric(18,4)");
-
-                    b.Property<int>("Year")
-                        .HasColumnType("integer");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("EducationAssetId", "Status", "Year", "Month")
-                        .IsUnique();
-
-                    b.ToTable("education_asset_value", "panwar_portals");
                 });
 
             modelBuilder.Entity("Panwar.Api.Models.EducationChart", b =>
@@ -1348,28 +1276,6 @@ namespace Panwar.Api.Migrations
                     b.Navigation("Series");
                 });
 
-            modelBuilder.Entity("Panwar.Api.Models.EducationAsset", b =>
-                {
-                    b.HasOne("Panwar.Api.Models.EducationPage", "Page")
-                        .WithMany("Assets")
-                        .HasForeignKey("EducationPageId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("Page");
-                });
-
-            modelBuilder.Entity("Panwar.Api.Models.EducationAssetValue", b =>
-                {
-                    b.HasOne("Panwar.Api.Models.EducationAsset", "Asset")
-                        .WithMany("Values")
-                        .HasForeignKey("EducationAssetId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("Asset");
-                });
-
             modelBuilder.Entity("Panwar.Api.Models.EducationChart", b =>
                 {
                     b.HasOne("Panwar.Api.Models.EducationPage", "Page")
@@ -1681,11 +1587,6 @@ namespace Panwar.Api.Migrations
                     b.Navigation("Brands");
                 });
 
-            modelBuilder.Entity("Panwar.Api.Models.EducationAsset", b =>
-                {
-                    b.Navigation("Values");
-                });
-
             modelBuilder.Entity("Panwar.Api.Models.EducationChart", b =>
                 {
                     b.Navigation("Annotations");
@@ -1700,8 +1601,6 @@ namespace Panwar.Api.Migrations
 
             modelBuilder.Entity("Panwar.Api.Models.EducationPage", b =>
                 {
-                    b.Navigation("Assets");
-
                     b.Navigation("Charts");
                 });
 

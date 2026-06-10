@@ -11,20 +11,31 @@ namespace Panwar.Api.Services;
 /// </summary>
 internal static class EducationMapper
 {
-    public static EducationPageResponse Build(EducationPage page, string? from, string? to)
+    public static EducationPageResponse Build(
+        EducationPage page, string? from, string? to, bool defaultLatestYear = false)
     {
-        // Available span across every data point on the page.
-        var allPoints = page.Charts
+        // Available span across every data point on the page - chart points and
+        // asset table values alike (asset history can reach further back).
+        var allOrds = page.Charts
             .SelectMany(c => c.Series)
             .SelectMany(s => s.DataPoints)
+            .Select(p => PeriodWindow.Ord(p.Year, p.Month))
+            .Concat(page.Assets
+                .SelectMany(a => a.Values)
+                .Select(v => PeriodWindow.Ord(v.Year, v.Month)))
             .ToList();
-        int? availFromOrd = allPoints.Count > 0 ? allPoints.Min(p => PeriodWindow.Ord(p.Year, p.Month)) : null;
-        int? availToOrd = allPoints.Count > 0 ? allPoints.Max(p => PeriodWindow.Ord(p.Year, p.Month)) : null;
+        int? availFromOrd = allOrds.Count > 0 ? allOrds.Min() : null;
+        int? availToOrd = allOrds.Count > 0 ? allOrds.Max() : null;
 
-        // Resolve the window. Null/unparseable bounds fall back to the full span
-        // (or the fallback year when the page is empty).
-        var fromOrd = PeriodWindow.TryParse(from, out var f) ? f : availFromOrd ?? PeriodWindow.Ord(2025, 1);
-        var toOrd = PeriodWindow.TryParse(to, out var t) ? t : availToOrd ?? PeriodWindow.Ord(2025, 12);
+        // Resolve the window. With defaultLatestYear (client dash) null bounds
+        // fall back to the latest year with data, Jan-Dec, mirroring the
+        // dashboards; otherwise (employee editor) to the full span. Empty pages
+        // fall back to 2025.
+        int latestYear = availToOrd.HasValue ? availToOrd.Value / 12 : 2025;
+        int fallbackFrom = defaultLatestYear ? PeriodWindow.Ord(latestYear, 1) : availFromOrd ?? PeriodWindow.Ord(2025, 1);
+        int fallbackTo = defaultLatestYear ? PeriodWindow.Ord(latestYear, 12) : availToOrd ?? PeriodWindow.Ord(2025, 12);
+        var fromOrd = PeriodWindow.TryParse(from, out var f) ? f : fallbackFrom;
+        var toOrd = PeriodWindow.TryParse(to, out var t) ? t : fallbackTo;
         if (toOrd < fromOrd) (fromOrd, toOrd) = (toOrd, fromOrd);
 
         bool InWindow(int year, int month)
@@ -60,6 +71,43 @@ internal static class EducationMapper
                     .ToList()))
             .ToList();
 
+        // Detail-table rows. Statuses keep the workbook's reading order
+        // (Completed-style first, Enrolled second); points are window-filtered.
+        // Assets with no in-window data still ship (the editor needs them; the
+        // client UI hides all-empty rows).
+        static int StatusRank(string status) => status.ToLowerInvariant() switch
+        {
+            "completed" or "completions" or "views" => 0,
+            "enrolled" => 1,
+            _ => 2,
+        };
+
+        var assets = page.Assets
+            .OrderBy(a => a.SortOrder).ThenBy(a => a.Title)
+            .Select(a => new EducationAssetDto(
+                a.Id,
+                a.GroupLabel,
+                a.Brand,
+                a.Type,
+                a.Title,
+                a.Author,
+                a.Expiry,
+                a.SortOrder,
+                a.Values
+                    .GroupBy(v => v.Status)
+                    .OrderBy(g => StatusRank(g.Key)).ThenBy(g => g.Key)
+                    .Select(g =>
+                    {
+                        var points = g
+                            .Where(v => InWindow(v.Year, v.Month))
+                            .OrderBy(v => v.Year).ThenBy(v => v.Month)
+                            .Select(v => new EducationPointDto(v.Year, v.Month, v.Value))
+                            .ToList();
+                        return new EducationAssetStatusDto(g.Key, points, points.Sum(p => p.Value));
+                    })
+                    .ToList()))
+            .ToList();
+
         var period = new DashboardPeriodDto(
             From: PeriodWindow.ToYm(fromOrd),
             To: PeriodWindow.ToYm(toOrd),
@@ -67,6 +115,6 @@ internal static class EducationMapper
             AvailableTo: availToOrd.HasValue ? PeriodWindow.ToYm(availToOrd.Value) : null);
 
         var summary = new EducationPageSummaryDto(page.Id, page.Name, page.Slug, page.SortOrder, page.Charts.Count);
-        return new EducationPageResponse(summary, period, charts);
+        return new EducationPageResponse(summary, period, charts, assets);
     }
 }

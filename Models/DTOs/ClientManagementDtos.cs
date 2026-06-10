@@ -7,7 +7,16 @@ public sealed record ClientListItemDto(
     string? LogoUrl,
     string? PrimaryColor,
     string? AccentColor,
+    bool ShowBrandMonthlyChart,
+    bool ShowPublisherChart,
     int UserCount);
+
+/// <summary>PATCH manage/clients/{slug}/overview-charts body.</summary>
+public class OverviewChartsRequest
+{
+    public bool ShowBrandMonthlyChart { get; set; } = true;
+    public bool ShowPublisherChart { get; set; } = true;
+}
 
 public class CreateClientRequest
 {

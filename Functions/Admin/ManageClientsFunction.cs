@@ -44,6 +44,7 @@ public class ManageClientsFunction
             .OrderBy(c => c.Name)
             .Select(c => new ClientListItemDto(
                 c.Id, c.Name, c.Slug, c.LogoUrl, c.PrimaryColor, c.AccentColor,
+                c.ShowBrandMonthlyChart, c.ShowPublisherChart,
                 _context.UserClients.Count(uc => uc.ClientId == c.Id)))
             .ToListAsync(ct);
 
@@ -99,7 +100,48 @@ public class ManageClientsFunction
 
         var response = req.CreateResponse(HttpStatusCode.Created);
         await response.WriteAsJsonAsync(new ClientListItemDto(
-            client.Id, client.Name, client.Slug, client.LogoUrl, client.PrimaryColor, client.AccentColor, 0));
+            client.Id, client.Name, client.Slug, client.LogoUrl, client.PrimaryColor, client.AccentColor,
+            client.ShowBrandMonthlyChart, client.ShowPublisherChart, 0));
+        return response;
+    }
+
+    [Function("ManageUpdateOverviewCharts")]
+    public async Task<HttpResponseData> UpdateOverviewCharts(
+        [HttpTrigger(AuthorizationLevel.Anonymous, "patch", Route = "manage/clients/{clientSlug}/overview-charts")] HttpRequestData req,
+        FunctionContext context,
+        string clientSlug)
+    {
+        if (!CanManageClients(req, context))
+            return await req.CreateForbiddenResponseAsync();
+
+        var ct = context.CancellationToken;
+
+        var client = await _context.Clients.FirstOrDefaultAsync(c => c.Slug == clientSlug, ct);
+        if (client is null)
+        {
+            var notFound = req.CreateResponse(HttpStatusCode.NotFound);
+            await notFound.WriteAsJsonAsync(new { error = "Client not found" });
+            return notFound;
+        }
+
+        var body = await new StreamReader(req.Body).ReadToEndAsync();
+        var data = JsonSerializer.Deserialize<OverviewChartsRequest>(body, new JsonSerializerOptions
+        {
+            PropertyNameCaseInsensitive = true
+        });
+        if (data is null)
+            return await BadRequest(req, "Request body is required");
+
+        client.ShowBrandMonthlyChart = data.ShowBrandMonthlyChart;
+        client.ShowPublisherChart = data.ShowPublisherChart;
+        client.UpdatedAt = DateTime.UtcNow;
+        await _context.SaveChangesAsync(ct);
+
+        var userCount = await _context.UserClients.CountAsync(uc => uc.ClientId == client.Id, ct);
+        var response = req.CreateResponse(HttpStatusCode.OK);
+        await response.WriteAsJsonAsync(new ClientListItemDto(
+            client.Id, client.Name, client.Slug, client.LogoUrl, client.PrimaryColor, client.AccentColor,
+            client.ShowBrandMonthlyChart, client.ShowPublisherChart, userCount));
         return response;
     }
 

@@ -18,9 +18,21 @@ public sealed record ClientSummaryResponse(
     /// <summary>True when the window has no actuals — the dashboard shows a plan, not results.</summary>
     bool IsPlan,
     /// <summary>Analyst-written summary for the window's end year; null when none exists.</summary>
-    YearSummaryDto? Summary);
+    YearSummaryDto? Summary,
+    /// <summary>Per-client toggle: render the monthly touchpoints-by-brand chart.</summary>
+    bool ShowBrandMonthlyChart,
+    /// <summary>Per-client toggle: render the touchpoints-vs-engagements-by-publisher chart.</summary>
+    bool ShowPublisherChart,
+    /// <summary>Monthly in-window metrics per brand for the brand chart; empty when disabled or planning.</summary>
+    IReadOnlyList<BrandMonthlyDto> MonthlyByBrand);
 
 public sealed record YearSummaryDto(int Year, string Text);
+
+/// <summary>One brand's in-window monthly metric series (for the overview brand chart).</summary>
+public sealed record BrandMonthlyDto(
+    string Label,
+    string BrandSlug,
+    IReadOnlyList<DashboardMonthDto> Months);
 
 public sealed record ClientSummaryClientDto(Guid Id, string Name, string Slug);
 

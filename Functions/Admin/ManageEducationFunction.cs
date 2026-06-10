@@ -433,6 +433,133 @@ public class ManageEducationFunction
         return req.CreateResponse(HttpStatusCode.NoContent);
     }
 
+    // ── Assets (the page's detail table) ─────────────────────────────────────
+
+    [Function("ManageCreateEducationAsset")]
+    public async Task<HttpResponseData> CreateAsset(
+        [HttpTrigger(AuthorizationLevel.Anonymous, "post", Route = "manage/clients/{clientSlug}/education/{pageId}/assets")] HttpRequestData req,
+        FunctionContext context, string clientSlug, string pageId)
+    {
+        if (!CanManage(req, context)) return await req.CreateForbiddenResponseAsync();
+        if (!Guid.TryParse(pageId, out var pid)) return await BadRequest(req, "Invalid page id");
+        var (client, page, err) = await ResolvePage(req, context, clientSlug, pid);
+        if (err is not null) return err;
+        var ct = context.CancellationToken;
+
+        var data = await ReadJson<EducationAssetWriteRequest>(req);
+        if (data is null || string.IsNullOrWhiteSpace(data.Title)) return await BadRequest(req, "Asset title required");
+        if (string.IsNullOrWhiteSpace(data.GroupLabel)) return await BadRequest(req, "Group label required");
+
+        var maxOrder = await _context.EducationAssets.Where(a => a.EducationPageId == pid)
+            .Select(a => (int?)a.SortOrder).MaxAsync(ct) ?? -1;
+        var asset = new EducationAsset
+        {
+            Id = Guid.NewGuid(),
+            EducationPageId = pid,
+            GroupLabel = data.GroupLabel.Trim(),
+            Brand = Clean(data.Brand),
+            Type = Clean(data.Type),
+            Title = data.Title.Trim(),
+            Author = Clean(data.Author),
+            Expiry = data.Expiry,
+            SortOrder = data.SortOrder ?? maxOrder + 1,
+        };
+        _context.EducationAssets.Add(asset);
+        await _context.SaveChangesAsync(ct);
+        return await Ok(req, (await LoadTree(page!.Id, client!.Id, ct))!, HttpStatusCode.Created);
+    }
+
+    [Function("ManageUpdateEducationAsset")]
+    public async Task<HttpResponseData> UpdateAsset(
+        [HttpTrigger(AuthorizationLevel.Anonymous, "patch", Route = "manage/clients/{clientSlug}/education/assets/{assetId}")] HttpRequestData req,
+        FunctionContext context, string clientSlug, string assetId)
+    {
+        if (!CanManage(req, context)) return await req.CreateForbiddenResponseAsync();
+        if (!Guid.TryParse(assetId, out var aid)) return await BadRequest(req, "Invalid asset id");
+        var ct = context.CancellationToken;
+        var client = await _context.Clients.FirstOrDefaultAsync(c => c.Slug == clientSlug, ct);
+        if (client is null) return await NotFound(req);
+
+        var asset = await _context.EducationAssets
+            .FirstOrDefaultAsync(a => a.Id == aid && a.Page.ClientId == client.Id, ct);
+        if (asset is null) return await NotFound(req);
+
+        var data = await ReadJson<EducationAssetWriteRequest>(req);
+        if (data is null) return await BadRequest(req, "Request body required");
+        if (!string.IsNullOrWhiteSpace(data.GroupLabel)) asset.GroupLabel = data.GroupLabel.Trim();
+        if (!string.IsNullOrWhiteSpace(data.Title)) asset.Title = data.Title.Trim();
+        if (data.Brand is not null) asset.Brand = Clean(data.Brand);
+        if (data.Type is not null) asset.Type = Clean(data.Type);
+        if (data.Author is not null) asset.Author = Clean(data.Author);
+        if (data.Expiry.HasValue) asset.Expiry = data.Expiry;
+        if (data.ClearExpiry == true) asset.Expiry = null;
+        if (data.SortOrder.HasValue) asset.SortOrder = data.SortOrder.Value;
+        await _context.SaveChangesAsync(ct);
+        return await Ok(req, (await LoadTree(asset.EducationPageId, client.Id, ct))!);
+    }
+
+    [Function("ManageDeleteEducationAsset")]
+    public async Task<HttpResponseData> DeleteAsset(
+        [HttpTrigger(AuthorizationLevel.Anonymous, "delete", Route = "manage/clients/{clientSlug}/education/assets/{assetId}")] HttpRequestData req,
+        FunctionContext context, string clientSlug, string assetId)
+    {
+        if (!CanManage(req, context)) return await req.CreateForbiddenResponseAsync();
+        if (!Guid.TryParse(assetId, out var aid)) return await BadRequest(req, "Invalid asset id");
+        var ct = context.CancellationToken;
+        var client = await _context.Clients.FirstOrDefaultAsync(c => c.Slug == clientSlug, ct);
+        if (client is null) return await NotFound(req);
+
+        var asset = await _context.EducationAssets
+            .FirstOrDefaultAsync(a => a.Id == aid && a.Page.ClientId == client.Id, ct);
+        if (asset is null) return await NotFound(req);
+        _context.EducationAssets.Remove(asset);
+        await _context.SaveChangesAsync(ct);
+        return req.CreateResponse(HttpStatusCode.NoContent);
+    }
+
+    [Function("ManageSetEducationAssetValues")]
+    public async Task<HttpResponseData> SetAssetValues(
+        [HttpTrigger(AuthorizationLevel.Anonymous, "put", Route = "manage/clients/{clientSlug}/education/assets/{assetId}/values")] HttpRequestData req,
+        FunctionContext context, string clientSlug, string assetId)
+    {
+        if (!CanManage(req, context)) return await req.CreateForbiddenResponseAsync();
+        if (!Guid.TryParse(assetId, out var aid)) return await BadRequest(req, "Invalid asset id");
+        var ct = context.CancellationToken;
+        var client = await _context.Clients.FirstOrDefaultAsync(c => c.Slug == clientSlug, ct);
+        if (client is null) return await NotFound(req);
+
+        var asset = await _context.EducationAssets
+            .Include(a => a.Values)
+            .FirstOrDefaultAsync(a => a.Id == aid && a.Page.ClientId == client.Id, ct);
+        if (asset is null) return await NotFound(req);
+
+        var data = await ReadJson<EducationAssetValuesRequest>(req);
+        if (data is null) return await BadRequest(req, "Request body required");
+
+        // Collapse to one value per (status, year, month); last write wins.
+        var byKey = new Dictionary<(string, int, int), decimal>();
+        foreach (var v in data.Values)
+        {
+            if (string.IsNullOrWhiteSpace(v.Status)) return await BadRequest(req, "Value status required");
+            if (v.Month is < 1 or > 12) return await BadRequest(req, $"Invalid month {v.Month}");
+            byKey[(v.Status.Trim(), v.Year, v.Month)] = v.Value;
+        }
+
+        // Full replace of this asset's values.
+        _context.EducationAssetValues.RemoveRange(asset.Values);
+        _context.EducationAssetValues.AddRange(byKey.Select(kv => new EducationAssetValue
+        {
+            Id = Guid.NewGuid(),
+            EducationAssetId = aid,
+            Status = kv.Key.Item1,
+            Year = kv.Key.Item2,
+            Month = kv.Key.Item3,
+            Value = kv.Value,
+        }));
+        await _context.SaveChangesAsync(ct);
+        return await Ok(req, (await LoadTree(asset.EducationPageId, client.Id, ct))!);
+    }
+
     // ── Helpers ──────────────────────────────────────────────────────────────
 
     /// <summary>Loads + maps a page tree (unwindowed). When byChart is true, pageOrChartId is a chart id.</summary>
@@ -447,10 +574,14 @@ public class ManageEducationFunction
             pageId = chart.EducationPageId;
         }
 
+        // Three sibling collection includes - split queries avoid the
+        // cartesian row explosion a single join query produces.
         var page = await _context.EducationPages
             .AsNoTracking()
+            .AsSplitQuery()
             .Include(p => p.Charts).ThenInclude(c => c.Series).ThenInclude(s => s.DataPoints)
             .Include(p => p.Charts).ThenInclude(c => c.Annotations)
+            .Include(p => p.Assets).ThenInclude(a => a.Values)
             .FirstOrDefaultAsync(p => p.Id == pageId && p.ClientId == clientId, ct);
         if (page is null) return null;
         return EducationMapper.Build(page, null, null);

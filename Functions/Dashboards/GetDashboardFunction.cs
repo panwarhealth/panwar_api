@@ -11,7 +11,11 @@ using Panwar.Api.Shared.Extensions;
 namespace Panwar.Api.Functions.Dashboards;
 
 /// <summary>
-/// GET /api/dashboards/{clientSlug}/{brandSlug}/{audienceSlug}
+/// GET /api/dashboards/{clientSlug}/brands/{brandSlug}/{audienceSlug}
+///
+/// The "brands" segment is load-bearing: the Functions host maps routes in
+/// function-name order (not by specificity), so an unprefixed
+/// {brandSlug}/{audienceSlug} template swallows the education routes.
 ///
 /// Policy-gated: caller must have access to the client (via role or membership).
 /// </summary>
@@ -36,7 +40,7 @@ public class GetDashboardFunction
 
     [Function("GetDashboard")]
     public async Task<HttpResponseData> Run(
-        [HttpTrigger(AuthorizationLevel.Anonymous, "get", Route = "dashboards/{clientSlug}/{brandSlug}/{audienceSlug}")] HttpRequestData req,
+        [HttpTrigger(AuthorizationLevel.Anonymous, "get", Route = "dashboards/{clientSlug}/brands/{brandSlug}/{audienceSlug}")] HttpRequestData req,
         FunctionContext context,
         string clientSlug,
         string brandSlug,

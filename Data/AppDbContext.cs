@@ -49,6 +49,8 @@ public class AppDbContext : DbContext
     public DbSet<EducationSeries> EducationSeries { get; set; } = null!;
     public DbSet<EducationDataPoint> EducationDataPoints { get; set; } = null!;
     public DbSet<EducationAnnotation> EducationAnnotations { get; set; } = null!;
+    public DbSet<EducationAsset> EducationAssets { get; set; } = null!;
+    public DbSet<EducationAssetValue> EducationAssetValues { get; set; } = null!;
 
     // UTM
     public DbSet<UtmLink> UtmLinks { get; set; } = null!;
@@ -92,6 +94,7 @@ public class AppDbContext : DbContext
         ConfigureEducationSeries(modelBuilder);
         ConfigureEducationDataPoint(modelBuilder);
         ConfigureEducationAnnotation(modelBuilder);
+        ConfigureEducationAsset(modelBuilder);
         ConfigureUtmLink(modelBuilder);
         ConfigureUtmLinkClicks(modelBuilder);
         ConfigureMonthSnapshot(modelBuilder);
@@ -113,6 +116,8 @@ public class AppDbContext : DbContext
             entity.Property(e => e.LogoUrl).HasMaxLength(500);
             entity.Property(e => e.PrimaryColor).HasMaxLength(20);
             entity.Property(e => e.AccentColor).HasMaxLength(20);
+            entity.Property(e => e.ShowBrandMonthlyChart).HasDefaultValue(true);
+            entity.Property(e => e.ShowPublisherChart).HasDefaultValue(true);
             entity.Property(e => e.CreatedAt).HasDefaultValueSql("CURRENT_TIMESTAMP");
             entity.Property(e => e.UpdatedAt).HasDefaultValueSql("CURRENT_TIMESTAMP");
             entity.HasIndex(e => e.Slug).IsUnique();
@@ -413,6 +418,32 @@ public class AppDbContext : DbContext
             entity.HasOne(e => e.Series).WithMany().HasForeignKey(e => e.EducationSeriesId).OnDelete(DeleteBehavior.Cascade);
             entity.HasOne(e => e.CreatedBy).WithMany().HasForeignKey(e => e.CreatedByUserId).OnDelete(DeleteBehavior.SetNull);
             entity.HasIndex(e => e.EducationChartId);
+        });
+    }
+
+    private static void ConfigureEducationAsset(ModelBuilder modelBuilder)
+    {
+        modelBuilder.Entity<EducationAsset>(entity =>
+        {
+            entity.ToTable("education_asset");
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.GroupLabel).IsRequired().HasMaxLength(100);
+            entity.Property(e => e.Brand).HasMaxLength(100);
+            entity.Property(e => e.Type).HasMaxLength(50);
+            entity.Property(e => e.Title).IsRequired().HasMaxLength(500);
+            entity.Property(e => e.Author).HasMaxLength(255);
+            entity.HasOne(e => e.Page).WithMany(p => p.Assets).HasForeignKey(e => e.EducationPageId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasIndex(e => e.EducationPageId);
+        });
+
+        modelBuilder.Entity<EducationAssetValue>(entity =>
+        {
+            entity.ToTable("education_asset_value");
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Status).IsRequired().HasMaxLength(50);
+            entity.Property(e => e.Value).HasColumnType("numeric(18,4)");
+            entity.HasOne(e => e.Asset).WithMany(a => a.Values).HasForeignKey(e => e.EducationAssetId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasIndex(e => new { e.EducationAssetId, e.Status, e.Year, e.Month }).IsUnique();
         });
     }
 

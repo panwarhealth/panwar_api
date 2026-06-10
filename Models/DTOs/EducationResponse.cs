@@ -16,7 +16,8 @@ public sealed record EducationPagesResponse(IReadOnlyList<EducationPageSummaryDt
 public sealed record EducationPageResponse(
     EducationPageSummaryDto Page,
     DashboardPeriodDto Period,
-    IReadOnlyList<EducationChartDto> Charts);
+    IReadOnlyList<EducationChartDto> Charts,
+    IReadOnlyList<EducationAssetDto> Assets);
 
 public sealed record EducationChartDto(
     Guid Id,
@@ -41,3 +42,24 @@ public sealed record EducationAnnotationDto(
     int Year,
     int Month,
     string Text);
+
+/// <summary>
+/// One row of the page's detail table (the workbook's per-asset education
+/// table): metadata plus one monthly series per status (Completed / Enrolled /
+/// Views). Points are window-filtered on the client read; Total sums them.
+/// </summary>
+public sealed record EducationAssetDto(
+    Guid Id,
+    string GroupLabel,
+    string? Brand,
+    string? Type,
+    string Title,
+    string? Author,
+    DateOnly? Expiry,
+    int SortOrder,
+    IReadOnlyList<EducationAssetStatusDto> Statuses);
+
+public sealed record EducationAssetStatusDto(
+    string Status,
+    IReadOnlyList<EducationPointDto> Points,
+    decimal Total);

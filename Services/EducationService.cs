@@ -29,13 +29,17 @@ public class EducationService : IEducationService
     public async Task<EducationPageResponse?> GetPageAsync(
         Guid clientId, string pageSlug, string? from, string? to, CancellationToken cancellationToken)
     {
+        // Three sibling collection includes - split queries avoid the
+        // cartesian row explosion a single join query produces.
         var page = await _context.EducationPages
             .AsNoTracking()
+            .AsSplitQuery()
             .Include(p => p.Charts).ThenInclude(c => c.Series).ThenInclude(s => s.DataPoints)
             .Include(p => p.Charts).ThenInclude(c => c.Annotations)
+            .Include(p => p.Assets).ThenInclude(a => a.Values)
             .FirstOrDefaultAsync(p => p.ClientId == clientId && p.Slug == pageSlug, cancellationToken);
         if (page is null) return null;
 
-        return EducationMapper.Build(page, from, to);
+        return EducationMapper.Build(page, from, to, defaultLatestYear: true);
     }
 }
