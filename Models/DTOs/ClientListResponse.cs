@@ -29,6 +29,6 @@ public sealed record ClientBrandsResponse(
 /// (ordered by audience name). The client portal uses the first entry to jump
 /// straight into a populated dashboard instead of an empty audience picker.
 /// </summary>
-public sealed record BrandSummaryDto(Guid Id, string Name, string Slug, IReadOnlyList<string> AudienceSlugs);
+public sealed record BrandSummaryDto(Guid Id, string Name, string Slug, string? Color, IReadOnlyList<string> AudienceSlugs);
 
 public sealed record AudienceSummaryDto(Guid Id, string Name, string Slug);

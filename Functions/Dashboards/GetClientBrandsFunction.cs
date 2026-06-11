@@ -60,7 +60,7 @@ public class GetClientBrandsFunction
                 .AsNoTracking()
                 .Where(b => b.ClientId == client.Id)
                 .OrderBy(b => b.Name)
-                .Select(b => new { b.Id, b.Name, b.Slug })
+                .Select(b => new { b.Id, b.Name, b.Slug, b.Color })
                 .ToListAsync(ct);
 
             // Which audiences actually have placements for each brand, so the
@@ -80,7 +80,7 @@ public class GetClientBrandsFunction
 
             var brands = brandRows
                 .Select(b => new BrandSummaryDto(
-                    b.Id, b.Name, b.Slug,
+                    b.Id, b.Name, b.Slug, b.Color,
                     audienceSlugsByBrand.TryGetValue(b.Id, out var slugs) ? slugs : Array.Empty<string>()))
                 .ToList();
 

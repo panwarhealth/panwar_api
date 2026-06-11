@@ -21,6 +21,7 @@ namespace Panwar.Api.Functions.Admin;
 public class ManageTaxonomyFunction
 {
     private static readonly Regex SlugPattern = new("^[a-z0-9](?:[a-z0-9-]{0,98}[a-z0-9])?$", RegexOptions.Compiled);
+    private static readonly Regex ColorPattern = new("^#[0-9a-fA-F]{6}$", RegexOptions.Compiled);
     private static readonly JsonSerializerOptions JsonOptions = new() { PropertyNameCaseInsensitive = true };
 
     private readonly ILogger<ManageTaxonomyFunction> _logger;
@@ -51,7 +52,7 @@ public class ManageTaxonomyFunction
             .Where(b => b.ClientId == client.Id)
             .OrderBy(b => b.Name)
             .Select(b => new BrandDto(
-                b.Id, b.Name, b.Slug,
+                b.Id, b.Name, b.Slug, b.Color,
                 _context.Placements.Count(p => p.BrandId == b.Id)))
             .ToListAsync(ct);
 
@@ -83,12 +84,16 @@ public class ManageTaxonomyFunction
         if (await _context.Brands.AnyAsync(b => b.ClientId == client.Id && b.Slug == slug, ct))
             return await BadRequest(req, "A brand with that slug already exists for this client");
 
+        var color = NormalizeColor(data.Color);
+        if (color.error is not null) return await BadRequest(req, color.error);
+
         var brand = new Brand
         {
             Id = Guid.NewGuid(),
             ClientId = client.Id,
             Name = name,
             Slug = slug,
+            Color = color.value,
             CreatedAt = DateTime.UtcNow,
             UpdatedAt = DateTime.UtcNow,
         };
@@ -96,7 +101,7 @@ public class ManageTaxonomyFunction
         await _context.SaveChangesAsync(ct);
 
         var resp = req.CreateResponse(HttpStatusCode.Created);
-        await resp.WriteAsJsonAsync(new BrandDto(brand.Id, brand.Name, brand.Slug, 0));
+        await resp.WriteAsJsonAsync(new BrandDto(brand.Id, brand.Name, brand.Slug, brand.Color, 0));
         return resp;
     }
 
@@ -129,6 +134,13 @@ public class ManageTaxonomyFunction
             await _context.Brands.AnyAsync(b => b.ClientId == client.Id && b.Slug == slug, ct))
             return await BadRequest(req, "A brand with that slug already exists for this client");
 
+        if (data.Color is not null)
+        {
+            var color = NormalizeColor(data.Color);
+            if (color.error is not null) return await BadRequest(req, color.error);
+            brand.Color = color.value;
+        }
+
         brand.Name = name;
         brand.Slug = slug;
         brand.UpdatedAt = DateTime.UtcNow;
@@ -136,7 +148,7 @@ public class ManageTaxonomyFunction
 
         var placementCount = await _context.Placements.CountAsync(p => p.BrandId == brand.Id, ct);
         var resp = req.CreateResponse(HttpStatusCode.OK);
-        await resp.WriteAsJsonAsync(new BrandDto(brand.Id, brand.Name, brand.Slug, placementCount));
+        await resp.WriteAsJsonAsync(new BrandDto(brand.Id, brand.Name, brand.Slug, brand.Color, placementCount));
         return resp;
     }
 
@@ -304,6 +316,16 @@ public class ManageTaxonomyFunction
 
     private static bool CanManage(HttpRequestData req, FunctionContext context)
         => req.HasRole(context, "panwar-admin") || req.HasRole(context, "dashboard-editor");
+
+    /// <summary>Trims and validates a hex colour. Empty/whitespace clears (null value); bad format sets error.</summary>
+    private static (string? value, string? error) NormalizeColor(string? raw)
+    {
+        var trimmed = raw?.Trim();
+        if (string.IsNullOrEmpty(trimmed)) return (null, null);
+        return ColorPattern.IsMatch(trimmed)
+            ? (trimmed.ToLowerInvariant(), null)
+            : (null, "Colour must be a hex value like #d62728");
+    }
 
     private static async Task<T?> ReadJson<T>(HttpRequestData req)
     {

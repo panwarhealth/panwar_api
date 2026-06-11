@@ -132,6 +132,7 @@ public class AppDbContext : DbContext
             entity.HasKey(e => e.Id);
             entity.Property(e => e.Name).IsRequired().HasMaxLength(255);
             entity.Property(e => e.Slug).IsRequired().HasMaxLength(100);
+            entity.Property(e => e.Color).HasMaxLength(16);
             entity.Property(e => e.CreatedAt).HasDefaultValueSql("CURRENT_TIMESTAMP");
             entity.Property(e => e.UpdatedAt).HasDefaultValueSql("CURRENT_TIMESTAMP");
             entity.HasOne(e => e.Client).WithMany(c => c.Brands).HasForeignKey(e => e.ClientId).OnDelete(DeleteBehavior.Cascade);

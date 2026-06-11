@@ -1,12 +1,14 @@
 namespace Panwar.Api.Models.DTOs;
 
-public sealed record BrandDto(Guid Id, string Name, string Slug, int PlacementCount);
+public sealed record BrandDto(Guid Id, string Name, string Slug, string? Color, int PlacementCount);
 public sealed record AudienceDto(Guid Id, string Name, string Slug, int PlacementCount);
 
 public class BrandWriteRequest
 {
     public string Name { get; set; } = "";
     public string Slug { get; set; } = "";
+    /// <summary>Hex display colour (e.g. "#d62728"); null leaves it unchanged, empty string clears it.</summary>
+    public string? Color { get; set; }
 }
 
 public class AudienceWriteRequest

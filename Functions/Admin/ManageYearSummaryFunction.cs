@@ -58,13 +58,22 @@ public class ManageYearSummaryFunction
             .AsNoTracking()
             .FirstOrDefaultAsync(s => s.ClientId == client.Id && s.Year == year, ct);
 
-        // Years that already have a summary, so the tab's year picker can mark them.
-        var years = await _context.ClientYearSummaries
+        // Years the picker should offer: every year the client has placements
+        // for, plus any year that already has a summary. The Summary tab feeds
+        // this list to the shared workspace year picker, so it must cover the
+        // client's data years - not just years already written up.
+        var placementYears = await _context.Placements
+            .AsNoTracking()
+            .Where(p => p.Brand.ClientId == client.Id)
+            .Select(p => p.Year)
+            .Distinct()
+            .ToListAsync(ct);
+        var summaryYears = await _context.ClientYearSummaries
             .AsNoTracking()
             .Where(s => s.ClientId == client.Id)
             .Select(s => s.Year)
-            .OrderBy(y => y)
             .ToListAsync(ct);
+        var years = placementYears.Union(summaryYears).OrderBy(y => y).ToList();
 
         var resp = req.CreateResponse(HttpStatusCode.OK);
         await resp.WriteAsJsonAsync(new

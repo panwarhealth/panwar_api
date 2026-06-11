@@ -59,6 +59,23 @@ public class ClientSummaryService : IClientSummaryService
                 actualToOrd ?? int.MinValue,
                 liveSpans.Count > 0 ? liveSpans.Max(s => s.toOrd) : int.MinValue);
         }
+
+        // Years with an authored summary widen the span too - a brand-new client
+        // may have plan notes before any placements exist, and those notes must
+        // be reachable from the year filter.
+        var summaryYears = await _context.ClientYearSummaries
+            .AsNoTracking()
+            .Where(s => s.ClientId == clientId)
+            .Select(s => s.Year)
+            .ToListAsync(cancellationToken);
+        if (summaryYears.Count > 0)
+        {
+            var summaryFromOrd = PeriodWindow.Ord(summaryYears.Min(), 1);
+            var summaryToOrd = PeriodWindow.Ord(summaryYears.Max(), 12);
+            availFromOrd = Math.Min(availFromOrd ?? summaryFromOrd, summaryFromOrd);
+            availToOrd = Math.Max(availToOrd ?? summaryToOrd, summaryToOrd);
+        }
+
         int latestYear = (actualToOrd ?? availToOrd).HasValue ? (actualToOrd ?? availToOrd)!.Value / 12 : FallbackYear;
 
         var fromOrd = PeriodWindow.TryParse(from, out var f) ? f : PeriodWindow.Ord(latestYear, 1);
