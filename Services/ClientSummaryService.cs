@@ -37,6 +37,7 @@ public class ClientSummaryService : IClientSummaryService
             .Include(p => p.Brand)
             .Include(p => p.Audience)
             .Include(p => p.Publisher)
+            .Include(p => p.Template)
             .Include(p => p.Kpis)
             .Include(p => p.Actuals)
             .Where(p => p.Brand.ClientId == clientId)
@@ -173,6 +174,27 @@ public class ClientSummaryService : IClientSummaryService
             .ThenBy(r => r.Label)
             .ToList();
 
+        // Every placement as its own row (the workbook's FY25 Summary by Asset).
+        // Spend/metrics/targets reuse the same window helpers as the rollups so
+        // an asset row sums exactly to its publisher/brand totals above.
+        var byAsset = placements
+            .Select(p => new AssetRowDto(
+                Name: p.Name,
+                BrandName: p.Brand.Name,
+                BrandSlug: p.Brand.Slug,
+                AudienceName: p.Audience.Name,
+                PublisherName: p.Publisher.Name,
+                Objective: p.Objective.ToString(),
+                TemplateCode: PlacementEnumNames.ToName(p.Template.Code),
+                MediaCost: Costing(new[] { p }).Sum(x => x.MediaCost),
+                CpdInvestmentCost: Costing(new[] { p }).Sum(x => x.CpdInvestmentCost ?? 0),
+                Metrics: WindowMetrics(new[] { p }),
+                TargetMetrics: Targets(new[] { p })))
+            .OrderBy(a => a.BrandName)
+            .ThenBy(a => a.PublisherName)
+            .ThenBy(a => a.Name)
+            .ToList();
+
         var period = new DashboardPeriodDto(
             From: PeriodWindow.ToYm(fromOrd),
             To: PeriodWindow.ToYm(toOrd),
@@ -230,6 +252,7 @@ public class ClientSummaryService : IClientSummaryService
             Summary: summary,
             ShowBrandMonthlyChart: client.ShowBrandMonthlyChart,
             ShowPublisherChart: client.ShowPublisherChart,
-            MonthlyByBrand: monthlyByBrand);
+            MonthlyByBrand: monthlyByBrand,
+            ByAsset: byAsset);
     }
 }

@@ -49,7 +49,9 @@ public class ManageEducationFunction
             .AsNoTracking()
             .Where(p => p.ClientId == client.Id)
             .OrderBy(p => p.SortOrder).ThenBy(p => p.Name)
-            .Select(p => new EducationPageSummaryDto(p.Id, p.Name, p.Slug, p.SortOrder, p.Charts.Count))
+            // Admin picker doesn't need the overview aggregates - pass 0s
+            // (optional defaults aren't allowed inside an EF expression tree).
+            .Select(p => new EducationPageSummaryDto(p.Id, p.Name, p.Slug, p.SortOrder, p.Charts.Count, 0, 0, 0))
             .ToListAsync(ct);
 
         return await Ok(req, new EducationPagesResponse(pages));

@@ -20,7 +20,17 @@ public class EducationService : IEducationService
             .AsNoTracking()
             .Where(p => p.ClientId == clientId)
             .OrderBy(p => p.SortOrder).ThenBy(p => p.Name)
-            .Select(p => new EducationPageSummaryDto(p.Id, p.Name, p.Slug, p.SortOrder, p.Charts.Count))
+            .Select(p => new EducationPageSummaryDto(
+                p.Id, p.Name, p.Slug, p.SortOrder,
+                p.Charts.Count,
+                // Modules = series across the page's charts; assets = detail rows.
+                p.Charts.SelectMany(c => c.Series).Count(),
+                p.Assets.Count,
+                // Completions = the "Completed" status rows only (single-sourced
+                // from the asset tables, so charts mirroring them don't double-count).
+                p.Assets.SelectMany(a => a.Values)
+                    .Where(v => v.Status.ToLower().Contains("complet"))
+                    .Sum(v => (decimal?)v.Value) ?? 0))
             .ToListAsync(cancellationToken);
 
         return new EducationPagesResponse(pages);

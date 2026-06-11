@@ -24,7 +24,9 @@ public sealed record ClientSummaryResponse(
     /// <summary>Per-client toggle: render the touchpoints-vs-engagements-by-publisher chart.</summary>
     bool ShowPublisherChart,
     /// <summary>Monthly in-window metrics per brand for the brand chart; empty when disabled or planning.</summary>
-    IReadOnlyList<BrandMonthlyDto> MonthlyByBrand);
+    IReadOnlyList<BrandMonthlyDto> MonthlyByBrand,
+    /// <summary>Every placement as its own row (the workbook's FY25 Summary by Asset), grouped client-side by brand.</summary>
+    IReadOnlyList<AssetRowDto> ByAsset);
 
 public sealed record YearSummaryDto(int Year, string Text);
 
@@ -47,6 +49,24 @@ public sealed record SummaryRowDto(
     int PlacementCount,
     decimal MediaCost,
     decimal? PlannedMediaCost,
+    decimal CpdInvestmentCost,
+    IReadOnlyDictionary<string, decimal> Metrics,
+    IReadOnlyDictionary<string, decimal> TargetMetrics);
+
+/// <summary>
+/// One placement as a single row for the FY25 Summary-by-Asset table.
+/// <see cref="TemplateCode"/> lets the UI split touchpoints into the workbook's
+/// Print vs Digital impression columns (print template → print, else digital).
+/// </summary>
+public sealed record AssetRowDto(
+    string Name,
+    string BrandName,
+    string BrandSlug,
+    string AudienceName,
+    string PublisherName,
+    string Objective,
+    string TemplateCode,
+    decimal MediaCost,
     decimal CpdInvestmentCost,
     IReadOnlyDictionary<string, decimal> Metrics,
     IReadOnlyDictionary<string, decimal> TargetMetrics);

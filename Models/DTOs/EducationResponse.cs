@@ -1,9 +1,19 @@
 namespace Panwar.Api.Models.DTOs;
 
 /// <summary>
-/// Lightweight education-page entry for the picker / nav.
+/// Lightweight education-page entry for the picker / nav. The trailing
+/// aggregates feed the client overview cards; defaults keep the admin/list
+/// call sites that don't compute them compiling unchanged.
 /// </summary>
-public sealed record EducationPageSummaryDto(Guid Id, string Name, string Slug, int SortOrder, int ChartCount);
+public sealed record EducationPageSummaryDto(
+    Guid Id,
+    string Name,
+    string Slug,
+    int SortOrder,
+    int ChartCount,
+    int ModuleCount = 0,
+    int AssetCount = 0,
+    decimal Completions = 0);
 
 public sealed record EducationPagesResponse(IReadOnlyList<EducationPageSummaryDto> Pages);
 

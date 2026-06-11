@@ -91,4 +91,6 @@ public sealed record DashboardPlacementDto(
     /// <summary>eDM or education sub-category (snake_case); null when not applicable.</summary>
     string? Subcategory,
     /// <summary>In-window send dates for a merged eDM group ("YYYY-MM-DD"), sorted; empty otherwise.</summary>
-    IReadOnlyList<string> SendDates);
+    IReadOnlyList<string> SendDates,
+    /// <summary>Analyst's findings/commentary for this placement (the workbook's per-placement comments); null when none.</summary>
+    string? Comments);

@@ -205,7 +205,7 @@ public class DashboardService : IDashboardService
                 Id: rep.GroupId ?? rep.Id,
                 Name: rep.Name,
                 Objective: rep.Objective.ToString().ToLowerInvariant(),
-                TemplateCode: TemplateCodeToString(rep.Template.Code),
+                TemplateCode: PlacementEnumNames.ToName(rep.Template.Code),
                 PublisherName: rep.Publisher.Name,
                 PublisherSlug: rep.Publisher.Slug,
                 IsBonus: rep.IsBonus,
@@ -221,7 +221,8 @@ public class DashboardService : IDashboardService
                 StartDate: rep.StartDate?.ToString("yyyy-MM-dd"),
                 EndDate: rep.EndDate?.ToString("yyyy-MM-dd"),
                 Subcategory: subcategory,
-                SendDates: sendDates);
+                SendDates: sendDates,
+                Comments: rep.Comments);
         }
 
         var placementDtos = new List<DashboardPlacementDto>(placements.Count);
@@ -262,13 +263,4 @@ public class DashboardService : IDashboardService
             IsPlan: totals.Metrics.Count == 0);
     }
 
-    private static string TemplateCodeToString(MetricTemplateCode code) => code switch
-    {
-        MetricTemplateCode.DigitalDisplay => "digital_display",
-        MetricTemplateCode.Edm => "edm",
-        MetricTemplateCode.Print => "print",
-        MetricTemplateCode.SponsoredContent => "sponsored_content",
-        MetricTemplateCode.Education => "education",
-        _ => code.ToString().ToLowerInvariant(),
-    };
 }

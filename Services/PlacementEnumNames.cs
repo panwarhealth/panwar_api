@@ -8,6 +8,16 @@ namespace Panwar.Api.Services;
 /// </summary>
 internal static class PlacementEnumNames
 {
+    public static string ToName(MetricTemplateCode v) => v switch
+    {
+        MetricTemplateCode.DigitalDisplay => "digital_display",
+        MetricTemplateCode.Edm => "edm",
+        MetricTemplateCode.Print => "print",
+        MetricTemplateCode.SponsoredContent => "sponsored_content",
+        MetricTemplateCode.Education => "education",
+        _ => v.ToString().ToLowerInvariant(),
+    };
+
     public static string ToName(EdmSubcategory v) => v switch
     {
         EdmSubcategory.Solus => "solus",
