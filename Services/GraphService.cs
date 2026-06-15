@@ -1,3 +1,4 @@
+using System.Net;
 using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
@@ -6,6 +7,19 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Identity.Client;
 
 namespace Panwar.Api.Services;
+
+/// <summary>
+/// Thrown when Microsoft Graph returns a non-success status. Carries the actual
+/// status code and Graph's own error message so callers can react (idempotency,
+/// surfacing a meaningful HTTP status) instead of collapsing everything to 500.
+/// </summary>
+public class GraphApiException : Exception
+{
+    public HttpStatusCode StatusCode { get; }
+
+    public GraphApiException(HttpStatusCode statusCode, string message) : base(message)
+        => StatusCode = statusCode;
+}
 
 /// <summary>
 /// Calls Microsoft Graph API using client credentials (app-only) to manage
@@ -118,9 +132,8 @@ public class GraphService : IGraphService
         var token = await GetTokenAsync(cancellationToken);
         await EnsureAppMetadataAsync(token, cancellationToken);
 
+        // App roles are matched by their string value (e.g. "medical-writer").
         var roleEntry = _appRoles!.FirstOrDefault(r => r.Value.Value == roleValue);
-
-        // Also try matching by the role value string (e.g. "panwar-admin")
         if (roleEntry.Key is null)
         {
             throw new InvalidOperationException($"Unknown app role: {roleValue}");
@@ -133,25 +146,67 @@ public class GraphService : IGraphService
             appRoleId = roleEntry.Key
         };
 
-        var json = await GraphPostAsync(token,
-            $"https://graph.microsoft.com/v1.0/servicePrincipals/{_servicePrincipalId}/appRoleAssignedTo",
-            body, cancellationToken);
+        try
+        {
+            var json = await GraphPostAsync(token,
+                $"https://graph.microsoft.com/v1.0/servicePrincipals/{_servicePrincipalId}/appRoleAssignedTo",
+                body, cancellationToken);
 
-        var result = JsonSerializer.Deserialize<GraphRoleAssignmentDto>(json, JsonOptions);
-        _logger.LogInformation("Assigned role {Role} to user {UserId}", roleValue, userObjectId);
-        return result?.Id ?? "";
+            var result = JsonSerializer.Deserialize<GraphRoleAssignmentDto>(json, JsonOptions);
+            _logger.LogInformation("Assigned role {Role} to user {UserId}", roleValue, userObjectId);
+            return result?.Id ?? "";
+        }
+        catch (GraphApiException ex)
+            when (ex.StatusCode == HttpStatusCode.BadRequest
+                  && ex.Message.Contains("already exists", StringComparison.OrdinalIgnoreCase))
+        {
+            // Idempotent: the user already holds this role. Return the existing
+            // assignment id so the caller ends up in the intended state instead
+            // of seeing an error for a no-op.
+            _logger.LogInformation("Role {Role} already assigned to user {UserId}; returning existing assignment",
+                roleValue, userObjectId);
+            return await FindAssignmentIdAsync(token, userObjectId, roleEntry.Key!, cancellationToken) ?? "";
+        }
     }
 
-    public async Task RemoveRoleAsync(string assignmentId, CancellationToken cancellationToken = default)
+    public async Task RemoveRoleAsync(string userObjectId, string assignmentId, CancellationToken cancellationToken = default)
     {
         var token = await GetTokenAsync(cancellationToken);
         await EnsureAppMetadataAsync(token, cancellationToken);
 
-        await GraphDeleteAsync(token,
-            $"https://graph.microsoft.com/v1.0/servicePrincipals/{_servicePrincipalId}/appRoleAssignedTo/{assignmentId}",
-            cancellationToken);
+        try
+        {
+            // Use the user-centric endpoint to avoid the self-referential SP path
+            // which Graph sometimes rejects even with AppRoleAssignment.ReadWrite.All.
+            await GraphDeleteAsync(token,
+                $"https://graph.microsoft.com/v1.0/users/{userObjectId}/appRoleAssignments/{assignmentId}",
+                cancellationToken);
+            _logger.LogInformation("Removed role assignment {AssignmentId} from user {UserId}", assignmentId, userObjectId);
+        }
+        catch (GraphApiException ex) when (ex.StatusCode == HttpStatusCode.NotFound)
+        {
+            _logger.LogInformation("Role assignment {AssignmentId} already absent; nothing to remove", assignmentId);
+        }
+    }
 
-        _logger.LogInformation("Removed role assignment {AssignmentId}", assignmentId);
+    /// <summary>
+    /// Finds the existing appRoleAssignedTo id for a user + app role on our
+    /// service principal (used to recover the id when an assignment already
+    /// exists). The internal staff set is small, so a scan is fine.
+    /// </summary>
+    private async Task<string?> FindAssignmentIdAsync(
+        string token, string userObjectId, string appRoleId, CancellationToken cancellationToken)
+    {
+        var url = $"https://graph.microsoft.com/v1.0/servicePrincipals/{_servicePrincipalId}/appRoleAssignedTo?$top=999";
+        while (!string.IsNullOrEmpty(url))
+        {
+            var json = await GraphGetAsync(token, url, cancellationToken);
+            var result = JsonSerializer.Deserialize<GraphListResponse<GraphRoleAssignmentDto>>(json, JsonOptions);
+            var match = result?.Value?.FirstOrDefault(a => a.PrincipalId == userObjectId && a.AppRoleId == appRoleId);
+            if (match is not null) return match.Id;
+            url = result?.OdataNextLink;
+        }
+        return null;
     }
 
     private async Task<string> GetTokenAsync(CancellationToken cancellationToken)
@@ -193,7 +248,7 @@ public class GraphService : IGraphService
         if (!resp.IsSuccessStatusCode)
         {
             _logger.LogError("Graph GET {Url} failed: {Status} {Body}", url, resp.StatusCode, body);
-            throw new InvalidOperationException($"Graph API error: {resp.StatusCode}");
+            throw new GraphApiException(resp.StatusCode, ExtractGraphMessage(body));
         }
         return body;
     }
@@ -208,7 +263,7 @@ public class GraphService : IGraphService
         if (!resp.IsSuccessStatusCode)
         {
             _logger.LogError("Graph POST {Url} failed: {Status} {Body}", url, resp.StatusCode, body);
-            throw new InvalidOperationException($"Graph API error: {resp.StatusCode}");
+            throw new GraphApiException(resp.StatusCode, ExtractGraphMessage(body));
         }
         return body;
     }
@@ -222,8 +277,27 @@ public class GraphService : IGraphService
         {
             var body = await resp.Content.ReadAsStringAsync(ct);
             _logger.LogError("Graph DELETE {Url} failed: {Status} {Body}", url, resp.StatusCode, body);
-            throw new InvalidOperationException($"Graph API error: {resp.StatusCode}");
+            throw new GraphApiException(resp.StatusCode, ExtractGraphMessage(body));
         }
+    }
+
+    /// <summary>Pulls Graph's own error.message out of an error response body.</summary>
+    private static string ExtractGraphMessage(string body)
+    {
+        try
+        {
+            using var doc = JsonDocument.Parse(body);
+            if (doc.RootElement.TryGetProperty("error", out var err)
+                && err.TryGetProperty("message", out var msg))
+            {
+                return msg.GetString() ?? "Microsoft Graph request failed.";
+            }
+        }
+        catch
+        {
+            // Non-JSON or empty body - fall through to the generic message.
+        }
+        return "Microsoft Graph request failed.";
     }
 
     // Internal DTOs for Graph API deserialization

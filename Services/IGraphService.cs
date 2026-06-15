@@ -19,7 +19,7 @@ public interface IGraphService
     /// <summary>
     /// Removes an app role assignment from a user.
     /// </summary>
-    Task RemoveRoleAsync(string assignmentId, CancellationToken cancellationToken = default);
+    Task RemoveRoleAsync(string userObjectId, string assignmentId, CancellationToken cancellationToken = default);
 }
 
 public class GraphUser

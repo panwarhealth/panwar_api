@@ -84,6 +84,11 @@ public class AdminUsersFunction
             await response.WriteAsJsonAsync(new { assignmentId });
             return response;
         }
+        catch (GraphApiException ex)
+        {
+            _logger.LogError(ex, "Graph denied assigning role to user {UserId}", userId);
+            return await GraphErrorResponseAsync(req, ex);
+        }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Failed to assign role to user {UserId}", userId);
@@ -94,12 +99,13 @@ public class AdminUsersFunction
     }
 
     /// <summary>
-    /// DELETE /api/admin/users/roles/{assignmentId}
+    /// DELETE /api/manage/users/{userId}/roles/{assignmentId}
     /// </summary>
     [Function("AdminRemoveRole")]
     public async Task<HttpResponseData> RemoveRole(
-        [HttpTrigger(AuthorizationLevel.Anonymous, "delete", Route = "manage/users/roles/{assignmentId}")] HttpRequestData req,
+        [HttpTrigger(AuthorizationLevel.Anonymous, "delete", Route = "manage/users/{userId}/roles/{assignmentId}")] HttpRequestData req,
         FunctionContext context,
+        string userId,
         string assignmentId)
     {
         if (!req.HasRole(context, "panwar-admin"))
@@ -107,16 +113,43 @@ public class AdminUsersFunction
 
         try
         {
-            await _graphService.RemoveRoleAsync(assignmentId);
+            await _graphService.RemoveRoleAsync(userId, assignmentId);
             return req.CreateResponse(HttpStatusCode.NoContent);
+        }
+        catch (GraphApiException ex)
+        {
+            _logger.LogError(ex, "Graph denied removing role assignment {AssignmentId} for user {UserId}", assignmentId, userId);
+            return await GraphErrorResponseAsync(req, ex);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to remove role assignment {AssignmentId}", assignmentId);
+            _logger.LogError(ex, "Failed to remove role assignment {AssignmentId} for user {UserId}", assignmentId, userId);
             var error = req.CreateResponse(HttpStatusCode.InternalServerError);
             await error.WriteAsJsonAsync(new { error = ex.Message });
             return error;
         }
+    }
+
+    /// <summary>
+    /// Turns a Graph failure into a response the admin UI can show. A 403 means
+    /// the Graph app permissions are the problem (not the signed-in admin), so we
+    /// say so explicitly rather than leaking "insufficient privileges".
+    /// </summary>
+    private static async Task<HttpResponseData> GraphErrorResponseAsync(HttpRequestData req, GraphApiException ex)
+    {
+        var status = ex.StatusCode switch
+        {
+            HttpStatusCode.BadRequest => HttpStatusCode.BadRequest,
+            HttpStatusCode.Forbidden => HttpStatusCode.Forbidden,
+            HttpStatusCode.NotFound => HttpStatusCode.NotFound,
+            _ => HttpStatusCode.BadGateway,
+        };
+        var message = ex.StatusCode == HttpStatusCode.Forbidden
+            ? "Microsoft Graph denied this operation. The Employee SSO app registration is missing the AppRoleAssignment.ReadWrite.All application permission (with admin consent)."
+            : ex.Message;
+        var error = req.CreateResponse(status);
+        await error.WriteAsJsonAsync(new { error = message });
+        return error;
     }
 
     private class RoleRequest
