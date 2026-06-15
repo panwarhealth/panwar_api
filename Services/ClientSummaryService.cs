@@ -5,12 +5,6 @@ using Panwar.Api.Models.DTOs;
 
 namespace Panwar.Api.Services;
 
-/// <summary>
-/// Rolls up every placement for a client into the overview payload, within a
-/// month window. Performance metrics are windowed; KPI targets are pro-rated
-/// to the window by live-month overlap; spend is period-level. All in-memory
-/// aggregation after a single load.
-/// </summary>
 public class ClientSummaryService : IClientSummaryService
 {
     private const int FallbackYear = 2025;
@@ -43,10 +37,8 @@ public class ClientSummaryService : IClientSummaryService
             .Where(p => p.Brand.ClientId == clientId)
             .ToListAsync(cancellationToken);
 
-        // Available span across ALL years (for the UI's presets), covering actuals
-        // AND placement live periods so a planned future year is selectable before
-        // any results land. The default window stays the latest year with ACTUALS
-        // (results, not plan), falling back to the latest planned year.
+        // Available span covers actuals AND live periods so planned future years are selectable.
+        // Default window is the latest year with actuals; falls back to the latest planned year.
         var spanActuals = placements.SelectMany(p => p.Actuals).ToList();
         var liveSpans = placements.Select(PeriodWindow.LiveSpan).ToList();
         int? actualToOrd = spanActuals.Count > 0 ? spanActuals.Max(a => PeriodWindow.Ord(a.Year, a.Month)) : null;
@@ -61,9 +53,7 @@ public class ClientSummaryService : IClientSummaryService
                 liveSpans.Count > 0 ? liveSpans.Max(s => s.toOrd) : int.MinValue);
         }
 
-        // Years with an authored summary widen the span too - a brand-new client
-        // may have plan notes before any placements exist, and those notes must
-        // be reachable from the year filter.
+        // Summary years widen the span so clients with plan notes but no placements can still navigate.
         var summaryYears = await _context.ClientYearSummaries
             .AsNoTracking()
             .Where(s => s.ClientId == clientId)
@@ -83,8 +73,6 @@ public class ClientSummaryService : IClientSummaryService
         var toOrd = PeriodWindow.TryParse(to, out var t) ? t : PeriodWindow.Ord(latestYear, 12);
         if (toOrd < fromOrd) (fromOrd, toOrd) = (toOrd, fromOrd);
 
-        // Presence set: placements whose metrics fall in the window (education
-        // ranges overlap; eDM sends land on a month; others by reporting year).
         placements = placements.Where(p => PeriodWindow.AppearsInWindow(p, fromOrd, toOrd)).ToList();
 
         bool InWindow(PlacementActual a)
@@ -104,8 +92,6 @@ public class ClientSummaryService : IClientSummaryService
             foreach (var a in ps.SelectMany(p => p.Actuals).Where(InWindow)) Add(d, a.MetricKey, a.Value);
             return d;
         }
-        // Annual KPI targets are pro-rated to the window per the placement's date
-        // shape, so partial windows compare like-for-like with windowed actuals.
         Dictionary<string, decimal> Targets(IEnumerable<Placement> ps)
         {
             var d = new Dictionary<string, decimal>();
@@ -116,8 +102,6 @@ public class ClientSummaryService : IClientSummaryService
             }
             return d;
         }
-        // Cost belongs to the booking year, so only cost-counting placements
-        // contribute spend even when their metrics show across years.
         IEnumerable<Placement> Costing(IEnumerable<Placement> ps) =>
             ps.Where(p => PeriodWindow.CostsCountInWindow(p, fromOrd, toOrd));
         decimal? PlannedSum(IEnumerable<Placement> ps)
@@ -174,9 +158,6 @@ public class ClientSummaryService : IClientSummaryService
             .ThenBy(r => r.Label)
             .ToList();
 
-        // Every placement as its own row (the workbook's FY25 Summary by Asset).
-        // Spend/metrics/targets reuse the same window helpers as the rollups so
-        // an asset row sums exactly to its publisher/brand totals above.
         var byAsset = placements
             .Select(p => new AssetRowDto(
                 Name: p.Name,
@@ -201,12 +182,8 @@ public class ClientSummaryService : IClientSummaryService
             AvailableFrom: availFromOrd.HasValue ? PeriodWindow.ToYm(availFromOrd.Value) : null,
             AvailableTo: availToOrd.HasValue ? PeriodWindow.ToYm(availToOrd.Value) : null);
 
-        // No actuals in the window means the client is looking at a plan, not
-        // results — the UI flips to planned-spend/targets presentation.
         var isPlan = totals.Metrics.Count == 0;
 
-        // Monthly series per brand for the overview's brand chart. Skipped when
-        // the client has the chart off or the window is a plan (no actuals).
         var monthlyByBrand = new List<BrandMonthlyDto>();
         if (client.ShowBrandMonthlyChart && !isPlan)
         {
@@ -234,7 +211,6 @@ public class ClientSummaryService : IClientSummaryService
                 .ToList();
         }
 
-        // Analyst summary for the window's end year (results summary or plan notes).
         var summaryYear = toOrd / 12;
         var summary = await _context.ClientYearSummaries
             .AsNoTracking()

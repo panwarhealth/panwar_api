@@ -8,13 +8,8 @@ using Microsoft.Extensions.Logging;
 
 namespace Panwar.Api.Services;
 
-/// <summary>
-/// Sends transactional email through Microsoft 365 (smtp.office365.com) using
-/// OAuth2 client credentials → AUTH XOAUTH2 over STARTTLS. Mirrors the
-/// pharmachat_api/osteo_xchange_api EmailService pattern. The shared
-/// noreply@panwarhealth.com.au mailbox + Entra app reg are reused across all
-/// Panwar Health backend projects — no new mailbox or app reg required.
-/// </summary>
+// Sends email via smtp.office365.com using OAuth2 client credentials → AUTH XOAUTH2 over STARTTLS.
+// The noreply@panwarhealth.com.au mailbox and Entra app reg are shared across all Panwar Health projects.
 public class EmailService : IEmailService
 {
     private readonly IConfiguration _configuration;
@@ -204,9 +199,7 @@ public class EmailService : IEmailService
 
     private static string BuildMagicLinkHtml(string magicLink)
     {
-        // Compiled inline HTML — Panwar Health purple (#6F2C90).
-        // If you need to change the design, edit the MJML source in
-        // EmailTemplates/email-magic-link.mjml and recompile.
+        // Edit the MJML source in EmailTemplates/email-magic-link.mjml and recompile to change this template.
         return $@"<!doctype html>
 <html xmlns=""http://www.w3.org/1999/xhtml"">
   <head>

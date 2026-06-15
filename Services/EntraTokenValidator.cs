@@ -8,11 +8,6 @@ using Microsoft.IdentityModel.Tokens;
 
 namespace Panwar.Api.Services;
 
-/// <summary>
-/// Validates Entra ID tokens against Microsoft's OIDC signing keys.
-/// The token's audience must match our app registration's client ID,
-/// and the issuer must match our tenant.
-/// </summary>
 public class EntraTokenValidator : IEntraTokenValidator
 {
     private readonly ILogger<EntraTokenValidator> _logger;
@@ -57,11 +52,9 @@ public class EntraTokenValidator : IEntraTokenValidator
             };
 
             var handler = new JwtSecurityTokenHandler();
-            // Don't remap JWT claim names — we use the original names (oid, roles, etc.)
-            handler.MapInboundClaims = false;
+            handler.MapInboundClaims = false; // preserve original JWT claim names (oid, roles, etc.)
             var principal = handler.ValidateToken(idToken, validationParameters, out _);
 
-            // Debug: log all claim types to diagnose role extraction
             var claimTypes = principal.Claims.Select(c => $"{c.Type}={c.Value}").ToList();
             _logger.LogInformation("Entra token claims: {Claims}", string.Join(" | ", claimTypes));
 
@@ -82,7 +75,6 @@ public class EntraTokenValidator : IEntraTokenValidator
             var familyName = principal.FindFirstValue("family_name") ?? principal.FindFirstValue(ClaimTypes.Surname);
             var name = principal.FindFirstValue("name");
 
-            // Build display name from parts if the combined "name" claim is missing
             if (string.IsNullOrWhiteSpace(name) && (!string.IsNullOrWhiteSpace(givenName) || !string.IsNullOrWhiteSpace(familyName)))
             {
                 name = $"{givenName} {familyName}".Trim();

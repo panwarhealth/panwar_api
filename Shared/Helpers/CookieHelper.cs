@@ -3,12 +3,8 @@ using Panwar.Api.Shared.Middleware;
 
 namespace Panwar.Api.Shared.Helpers;
 
-/// <summary>
-/// Sets/clears the panwar_session HttpOnly cookie. In production it's
-/// scoped to .panwarhealth.com.au so portal., a1., and api. share it.
-/// In local dev (localhost origins) we can't set Domain and need
-/// SameSite=None to make cross-port cookies work.
-/// </summary>
+// Sets/clears the panwar_session HttpOnly cookie. Production scope is .panwarhealth.com.au.
+// Localhost omits Domain and Secure because func start serves plain HTTP.
 public static class CookieHelper
 {
     public const string CookieName = AuthenticationMiddleware.CookieName;
@@ -29,8 +25,6 @@ public static class CookieHelper
 
         if (isLocalhost)
         {
-            // localhost is same-site across ports so Lax works for cross-port
-            // dev requests. No Secure flag — func start serves plain HTTP.
             parts.Add("SameSite=Lax");
         }
         else

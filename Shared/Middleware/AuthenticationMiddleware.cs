@@ -7,11 +7,8 @@ using Panwar.Api.Services;
 
 namespace Panwar.Api.Shared.Middleware;
 
-/// <summary>
-/// Reads the auth cookie (production) or Authorization Bearer header (local dev),
-/// validates the JWT, and injects user context into FunctionContext.Items so
-/// downstream functions can grab it via HttpRequestDataExtensions.
-/// </summary>
+// Reads the panwar_session cookie (prod) or Bearer header (local dev), validates the JWT,
+// and injects user context into FunctionContext.Items for use via HttpRequestDataExtensions.
 public class AuthenticationMiddleware : IFunctionsWorkerMiddleware
 {
     public const string CookieName = "panwar_session";
@@ -27,14 +24,12 @@ public class AuthenticationMiddleware : IFunctionsWorkerMiddleware
 
         string? token = null;
 
-        // Cookie path (production / SPAs)
         var authCookie = requestData.Cookies.FirstOrDefault(c => c.Name == CookieName);
         if (authCookie is not null)
         {
             token = authCookie.Value;
         }
 
-        // Bearer header fallback (local dev / API clients)
         if (string.IsNullOrEmpty(token)
             && requestData.Headers.TryGetValues("Authorization", out var authHeaders))
         {
@@ -58,7 +53,6 @@ public class AuthenticationMiddleware : IFunctionsWorkerMiddleware
         {
             var userIdClaim = principal.FindFirst(ClaimTypes.NameIdentifier)?.Value;
             var userTypeClaim = principal.FindFirst(JwtService.ClaimUserType)?.Value;
-            // JwtSecurityTokenHandler maps "role" → ClaimTypes.Role on read
             var roles = principal.FindAll(ClaimTypes.Role).Select(c => c.Value).ToArray();
 
             if (Guid.TryParse(userIdClaim, out var userId))

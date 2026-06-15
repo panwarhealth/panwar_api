@@ -12,12 +12,6 @@ using Panwar.Api.Shared.Extensions;
 
 namespace Panwar.Api.Functions.Admin;
 
-/// <summary>
-/// Brand + Audience CRUD for a specific client. Both entities are client-scoped
-/// taxonomy (a brand belongs to one client; audiences like "Pharmacists" / "GPs"
-/// are also per-client because different pharma companies target different HCP
-/// segments).
-/// </summary>
 public class ManageTaxonomyFunction
 {
     private static readonly Regex SlugPattern = new("^[a-z0-9](?:[a-z0-9-]{0,98}[a-z0-9])?$", RegexOptions.Compiled);
@@ -32,8 +26,6 @@ public class ManageTaxonomyFunction
         _logger = logger;
         _context = context;
     }
-
-    // ── Brands ───────────────────────────────────────────────────────────────
 
     [Function("ManageListBrands")]
     public async Task<HttpResponseData> ListBrands(
@@ -178,8 +170,6 @@ public class ManageTaxonomyFunction
         return req.CreateResponse(HttpStatusCode.NoContent);
     }
 
-    // ── Audiences ────────────────────────────────────────────────────────────
-
     [Function("ManageListAudiences")]
     public async Task<HttpResponseData> ListAudiences(
         [HttpTrigger(AuthorizationLevel.Anonymous, "get", Route = "manage/clients/{clientSlug}/audiences")] HttpRequestData req,
@@ -312,12 +302,9 @@ public class ManageTaxonomyFunction
         return req.CreateResponse(HttpStatusCode.NoContent);
     }
 
-    // ── helpers ──────────────────────────────────────────────────────────────
-
     private static bool CanManage(HttpRequestData req, FunctionContext context)
         => req.HasRole(context, "panwar-admin") || req.HasRole(context, "dashboard-editor");
 
-    /// <summary>Trims and validates a hex colour. Empty/whitespace clears (null value); bad format sets error.</summary>
     private static (string? value, string? error) NormalizeColor(string? raw)
     {
         var trimmed = raw?.Trim();

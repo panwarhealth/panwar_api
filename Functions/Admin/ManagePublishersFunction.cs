@@ -12,11 +12,6 @@ using Panwar.Api.Shared.Extensions;
 
 namespace Panwar.Api.Functions.Admin;
 
-/// <summary>
-/// Publishers are a shared registry across all clients (real-world media
-/// outlets). Each publisher supports one or more metric templates, which
-/// determines what fields placements on that publisher capture.
-/// </summary>
 public class ManagePublishersFunction
 {
     private static readonly Regex SlugPattern = new("^[a-z0-9](?:[a-z0-9-]{0,98}[a-z0-9])?$", RegexOptions.Compiled);
@@ -159,7 +154,6 @@ public class ManagePublishersFunction
         publisher.Website = string.IsNullOrWhiteSpace(data.Website) ? null : data.Website.Trim();
         publisher.UpdatedAt = DateTime.UtcNow;
 
-        // Replace template assignments
         var desiredTemplates = data.TemplateIds.Distinct().ToHashSet();
         var existing = publisher.PublisherTemplates.ToList();
         foreach (var pt in existing.Where(pt => !desiredTemplates.Contains(pt.TemplateId)))

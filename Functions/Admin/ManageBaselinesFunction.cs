@@ -12,11 +12,7 @@ using Panwar.Api.Shared.Extensions;
 
 namespace Panwar.Api.Functions.Admin;
 
-/// <summary>
-/// Year-scoped KPI targets per (client, publisher, template, metric). Clients
-/// hand these over before the year starts; creating a placement for that year
-/// auto-populates its KPI targets from them (editors can override per placement).
-/// </summary>
+// Creating a placement auto-populates its KPI targets from these baselines; editors can override per placement.
 public class ManageBaselinesFunction
 {
     private static readonly JsonSerializerOptions JsonOptions = new() { PropertyNameCaseInsensitive = true };
@@ -58,8 +54,6 @@ public class ManageBaselinesFunction
                 b.Year, b.MetricKey, b.Value, b.Note))
             .ToListAsync(ct);
 
-        // Every year that has targets for this client (unfiltered) so the tab's
-        // year picker can populate its options.
         var years = await _context.ClientPublisherBaselines
             .AsNoTracking()
             .Where(b => b.ClientId == client.Id)
@@ -168,7 +162,6 @@ public class ManageBaselinesFunction
         return req.CreateResponse(HttpStatusCode.NoContent);
     }
 
-    /// <summary>Shared create/update validation, including the friendly duplicate check.</summary>
     private async Task<string?> Validate(Guid clientId, BaselineWriteRequest data, Guid? excludeId, CancellationToken ct)
     {
         if (string.IsNullOrWhiteSpace(data.MetricKey)) return "Metric key is required";

@@ -7,13 +7,8 @@ using Microsoft.Extensions.Logging;
 
 namespace Panwar.Api.Shared.Middleware;
 
-/// <summary>
-/// In-memory sliding-window rate limiter. Three buckets:
-///  - auth endpoints (magic link request): 5 / 60s per IP
-///  - authenticated users: 120 / 60s per UserId
-///  - unauthenticated: 30 / 60s per IP
-/// Resets on Function App cold-start, which is fine for our threat model.
-/// </summary>
+// In-memory sliding-window rate limiter: 5/60s per IP on auth routes, 120/60s per user, 30/60s per IP unauthenticated.
+// State resets on cold-start — acceptable for this threat model (Cloudflare handles volumetric attacks at the edge).
 public class RateLimitMiddleware : IFunctionsWorkerMiddleware
 {
     private static readonly ConcurrentDictionary<string, SlidingWindowCounter> _counters = new();

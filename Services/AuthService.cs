@@ -26,9 +26,7 @@ public class AuthService : IAuthService
 
         if (user is null)
         {
-            // Deliberate: clients are NOT auto-provisioned by magic-link verification.
-            // The editor must add them in the employee portal first (so they're scoped
-            // to the right ClientId). Magic-link verification for an unknown email returns null.
+            // Clients must be pre-provisioned in the employee portal — magic-link is not a sign-up flow.
             _logger.LogWarning("Magic link verified for unknown client email {Email}", normalizedEmail);
             return null;
         }

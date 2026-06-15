@@ -9,11 +9,6 @@ using Panwar.Api.Shared.Helpers;
 
 namespace Panwar.Api.Functions.Auth;
 
-/// <summary>
-/// POST /api/auth/magic-link/verify  { "token": "..." }
-/// On success: sets the panwar_session HttpOnly cookie and returns the user.
-/// On failure: 401.
-/// </summary>
 public class MagicLinkVerifyFunction
 {
     private readonly ILogger<MagicLinkVerifyFunction> _logger;

@@ -4,7 +4,6 @@ using Panwar.Api.Models.DTOs;
 
 namespace Panwar.Api.Services;
 
-/// <inheritdoc />
 public class EducationService : IEducationService
 {
     private readonly AppDbContext _context;
@@ -23,11 +22,9 @@ public class EducationService : IEducationService
             .Select(p => new EducationPageSummaryDto(
                 p.Id, p.Name, p.Slug, p.SortOrder,
                 p.Charts.Count,
-                // Modules = series across the page's charts; assets = detail rows.
                 p.Charts.SelectMany(c => c.Series).Count(),
                 p.Assets.Count,
-                // Completions = the "Completed" status rows only (single-sourced
-                // from the asset tables, so charts mirroring them don't double-count).
+                // "Completed"-status rows only — chart data points mirror these so we don't double-count.
                 p.Assets.SelectMany(a => a.Values)
                     .Where(v => v.Status.ToLower().Contains("complet"))
                     .Sum(v => (decimal?)v.Value) ?? 0))
@@ -39,8 +36,7 @@ public class EducationService : IEducationService
     public async Task<EducationPageResponse?> GetPageAsync(
         Guid clientId, string pageSlug, string? from, string? to, CancellationToken cancellationToken)
     {
-        // Three sibling collection includes - split queries avoid the
-        // cartesian row explosion a single join query produces.
+        // AsSplitQuery avoids the cartesian row explosion from three sibling collection includes.
         var page = await _context.EducationPages
             .AsNoTracking()
             .AsSplitQuery()

@@ -5,11 +5,6 @@ using Panwar.Api.Models.Enums;
 
 namespace Panwar.Api.Shared.Extensions;
 
-/// <summary>
-/// Convenience accessors for the user context that AuthenticationMiddleware
-/// stuffs into FunctionContext.Items. Functions call these to enforce
-/// authn/authz without re-parsing the JWT.
-/// </summary>
 public static class HttpRequestDataExtensions
 {
     public static Guid? GetUserId(this HttpRequestData _, FunctionContext context)

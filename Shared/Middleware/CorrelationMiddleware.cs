@@ -5,10 +5,6 @@ using Microsoft.Extensions.Logging;
 
 namespace Panwar.Api.Shared.Middleware;
 
-/// <summary>
-/// Tags every request with a correlation ID and logs request/response timing.
-/// Pulled from the inbound X-Correlation-ID header if present, otherwise generated.
-/// </summary>
 public class CorrelationMiddleware : IFunctionsWorkerMiddleware
 {
     private readonly ILogger<CorrelationMiddleware> _logger;

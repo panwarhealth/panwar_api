@@ -7,16 +7,8 @@ using Panwar.Api.Models.Enums;
 
 namespace Panwar.Api.Services;
 
-/// <summary>
-/// Builds the brand × audience dashboard payload from the live database, scoped
-/// to a month window (the global date filter). One round trip pulls every
-/// placement for the brand × audience with its publisher, template, KPIs and
-/// monthly actuals; the rest is in-memory aggregation. Artwork view URLs are
-/// minted per placement (cheap local presigning).
-/// </summary>
 public class DashboardService : IDashboardService
 {
-    // Fallback window only when a brand × audience has no actuals at all.
     private const int FallbackYear = 2025;
 
     private readonly AppDbContext _context;
@@ -55,11 +47,8 @@ public class DashboardService : IDashboardService
             .ThenBy(p => p.Name)
             .ToListAsync(cancellationToken);
 
-        // ── Resolve the month window ───────────────────────────────────────
-        // Available span covers actuals AND placement live periods so a planned
-        // future year is selectable before any results land. The default window
-        // stays the latest year with ACTUALS (results, not plan), falling back to
-        // the latest planned year.
+        // Available span covers actuals AND live periods so planned future years are selectable.
+        // Default window is the latest year with actuals; falls back to the latest planned year.
         var spanActuals = placements.SelectMany(p => p.Actuals).ToList();
         var liveSpans = placements.Select(PeriodWindow.LiveSpan).ToList();
         int? actualToOrd = spanActuals.Count > 0 ? spanActuals.Max(a => PeriodWindow.Ord(a.Year, a.Month)) : null;
@@ -79,8 +68,6 @@ public class DashboardService : IDashboardService
         var toOrd = PeriodWindow.TryParse(to, out var t) ? t : PeriodWindow.Ord(latestYear, 12);
         if (toOrd < fromOrd) (fromOrd, toOrd) = (toOrd, fromOrd);
 
-        // Presence set: placements whose metrics fall in the window (education
-        // ranges overlap; eDM sends land on a month; others by reporting year).
         placements = placements.Where(p => PeriodWindow.AppearsInWindow(p, fromOrd, toOrd)).ToList();
         var allActuals = placements.SelectMany(p => p.Actuals).ToList();
 
@@ -96,8 +83,6 @@ public class DashboardService : IDashboardService
             acc[key] = cur + value;
         }
 
-        // Annual KPI targets are pro-rated to the window per the placement's date
-        // shape, so partial windows compare like-for-like with windowed actuals.
         Dictionary<string, decimal> WindowTargets(IEnumerable<Placement> ps)
         {
             var d = new Dictionary<string, decimal>();
@@ -109,8 +94,6 @@ public class DashboardService : IDashboardService
             return d;
         }
 
-        // Cost belongs to the booking year, so only cost-counting members
-        // contribute spend even when their metrics show across years.
         IEnumerable<Placement> Costing(IEnumerable<Placement> ps) =>
             ps.Where(p => PeriodWindow.CostsCountInWindow(p, fromOrd, toOrd));
         decimal? PlannedSum(IEnumerable<Placement> ps)
@@ -119,7 +102,6 @@ public class DashboardService : IDashboardService
             return costing.Any(p => p.PlannedMediaCost.HasValue) ? costing.Sum(p => p.PlannedMediaCost ?? 0) : null;
         }
 
-        // ── Totals (windowed actuals + pro-rated KPI targets) ──────────────
         var totalsMetrics = new Dictionary<string, decimal>();
         foreach (var a in allActuals.Where(InWindow)) Add(totalsMetrics, a.MetricKey, a.Value);
         var targetMetrics = WindowTargets(placements);
@@ -132,7 +114,6 @@ public class DashboardService : IDashboardService
             Metrics: totalsMetrics,
             TargetMetrics: targetMetrics);
 
-        // ── Per-month rollup (only months inside the window) ───────────────
         var monthly = new List<DashboardMonthDto>();
         for (var o = fromOrd; o <= toOrd; o++)
         {
@@ -143,7 +124,6 @@ public class DashboardService : IDashboardService
             monthly.Add(new DashboardMonthDto(year, month, mm));
         }
 
-        // ── Per-publisher rollup ───────────────────────────────────────────
         var publishers = placements
             .GroupBy(p => p.PublisherId)
             .Select(g =>
@@ -167,10 +147,7 @@ public class DashboardService : IDashboardService
             .ThenBy(p => p.Name)
             .ToList();
 
-        // ── Per-placement detail (with presigned artwork) ──────────────────
-        // Duplicated eDM sends (same GroupId) merge into one card: summed
-        // actuals/targets/costs and the list of in-window send dates. Other
-        // templates and singleton groups render one card each.
+        // eDM sends sharing a GroupId merge into one card; other templates render one card each.
         async Task<DashboardPlacementDto> BuildCard(Placement rep, List<Placement> members)
         {
             var cardTotals = new Dictionary<string, decimal>();
@@ -229,7 +206,6 @@ public class DashboardService : IDashboardService
         var mergedGroups = new HashSet<Guid>();
         foreach (var p in placements)
         {
-            // Only eDM duplicates merge; everything else renders one card each.
             if (p.GroupId.HasValue && p.Template.Code == MetricTemplateCode.Edm)
             {
                 var key = p.GroupId.Value;

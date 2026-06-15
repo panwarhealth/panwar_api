@@ -12,11 +12,7 @@ using Panwar.Api.Shared.Extensions;
 
 namespace Panwar.Api.Functions.Admin;
 
-/// <summary>
-/// Client CRUD endpoints for the employee portal. Gated to panwar-admin and
-/// dashboard-editor roles (medical writers can edit dashboards but don't manage
-/// client onboarding).
-/// </summary>
+// dashboard-editor can edit dashboards but cannot manage client onboarding — that's panwar-admin only.
 public class ManageClientsFunction
 {
     private static readonly Regex SlugPattern = new("^[a-z0-9](?:[a-z0-9-]{0,98}[a-z0-9])?$", RegexOptions.Compiled);

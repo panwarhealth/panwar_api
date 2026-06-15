@@ -33,8 +33,7 @@ public class Placement
     // Duplicate-group key. Duplicated eDM sends share one group and are merged
     // into a single card on the client dashboard. Group key on read = GroupId ?? Id.
     public Guid? GroupId { get; set; }
-    public string? CreativeCode { get; set; }         // "RB0686"
-    public string? OsCode { get; set; }               // "RT-M-Zv9qDM" — not unique
+    public string? OsCode { get; set; }               // "RT-M-Zv9qDM" — not unique; comma-separated when multiple
     public string? UtmUrl { get; set; }
     public string? ArtworkUrl { get; set; }           // R2 key
     public string? Comments { get; set; }             // long-form markdown

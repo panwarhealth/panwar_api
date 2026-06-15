@@ -12,11 +12,7 @@ using Panwar.Api.Shared.Extensions;
 
 namespace Panwar.Api.Functions.Admin;
 
-/// <summary>
-/// Manage which client users have access to a specific client. Gated to
-/// panwar-admin and dashboard-editor. Staff emails (@panwarhealth.com.au) are
-/// rejected — staff have blanket access via their Entra role, not via user_client.
-/// </summary>
+// Staff emails are rejected here — they have blanket access via Entra role, not via user_client rows.
 public class ManageClientUsersFunction
 {
     private const string StaffDomainSuffix = "@panwarhealth.com.au";
@@ -82,7 +78,6 @@ public class ManageClientUsersFunction
         if (email.EndsWith(StaffDomainSuffix, StringComparison.Ordinal))
             return await BadRequest(req, "Staff emails already have access via their role — no need to assign them here");
 
-        // Find-or-create the client user
         var user = await _context.Users.FirstOrDefaultAsync(u => u.Email == email, ct);
         if (user is null)
         {
@@ -102,7 +97,6 @@ public class ManageClientUsersFunction
             return await BadRequest(req, "That email belongs to a non-client account");
         }
 
-        // Ensure membership row exists
         var alreadyMember = await _context.UserClients
             .AnyAsync(uc => uc.UserId == user.Id && uc.ClientId == client.Id, ct);
         if (!alreadyMember)

@@ -25,9 +25,6 @@ public class AdminUsersFunction
         _secretExpiry = configuration["ENTRA_CLIENT_SECRET_EXPIRY"];
     }
 
-    /// <summary>
-    /// GET /api/admin/users — list all tenant users with their app role assignments.
-    /// </summary>
     [Function("AdminGetUsers")]
     public async Task<HttpResponseData> GetUsers(
         [HttpTrigger(AuthorizationLevel.Anonymous, "get", Route = "manage/users")] HttpRequestData req,
@@ -52,9 +49,6 @@ public class AdminUsersFunction
         }
     }
 
-    /// <summary>
-    /// POST /api/admin/users/{userId}/roles  { "role": "panwar-admin" }
-    /// </summary>
     [Function("AdminAssignRole")]
     public async Task<HttpResponseData> AssignRole(
         [HttpTrigger(AuthorizationLevel.Anonymous, "post", Route = "manage/users/{userId}/roles")] HttpRequestData req,
@@ -98,9 +92,6 @@ public class AdminUsersFunction
         }
     }
 
-    /// <summary>
-    /// DELETE /api/manage/users/{userId}/roles/{assignmentId}
-    /// </summary>
     [Function("AdminRemoveRole")]
     public async Task<HttpResponseData> RemoveRole(
         [HttpTrigger(AuthorizationLevel.Anonymous, "delete", Route = "manage/users/{userId}/roles/{assignmentId}")] HttpRequestData req,
@@ -130,11 +121,6 @@ public class AdminUsersFunction
         }
     }
 
-    /// <summary>
-    /// Turns a Graph failure into a response the admin UI can show. A 403 means
-    /// the Graph app permissions are the problem (not the signed-in admin), so we
-    /// say so explicitly rather than leaking "insufficient privileges".
-    /// </summary>
     private static async Task<HttpResponseData> GraphErrorResponseAsync(HttpRequestData req, GraphApiException ex)
     {
         var status = ex.StatusCode switch

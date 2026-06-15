@@ -3,19 +3,12 @@ using Panwar.Api.Models.DTOs;
 
 namespace Panwar.Api.Services;
 
-/// <summary>
-/// Builds the education page response tree from loaded entities. Shared by the
-/// client read service (scoped to a month window) and the employee editor
-/// (unwindowed, pass null bounds). A fully-loaded page (Charts → Series →
-/// DataPoints, Charts → Annotations) is expected.
-/// </summary>
+// Pass null bounds for the employee editor (unwindowed); client dash passes explicit from/to.
 internal static class EducationMapper
 {
     public static EducationPageResponse Build(
         EducationPage page, string? from, string? to, bool defaultLatestYear = false)
     {
-        // Available span across every data point on the page - chart points and
-        // asset table values alike (asset history can reach further back).
         var allOrds = page.Charts
             .SelectMany(c => c.Series)
             .SelectMany(s => s.DataPoints)
@@ -27,10 +20,6 @@ internal static class EducationMapper
         int? availFromOrd = allOrds.Count > 0 ? allOrds.Min() : null;
         int? availToOrd = allOrds.Count > 0 ? allOrds.Max() : null;
 
-        // Resolve the window. With defaultLatestYear (client dash) null bounds
-        // fall back to the latest year with data, Jan-Dec, mirroring the
-        // dashboards; otherwise (employee editor) to the full span. Empty pages
-        // fall back to 2025.
         int latestYear = availToOrd.HasValue ? availToOrd.Value / 12 : 2025;
         int fallbackFrom = defaultLatestYear ? PeriodWindow.Ord(latestYear, 1) : availFromOrd ?? PeriodWindow.Ord(2025, 1);
         int fallbackTo = defaultLatestYear ? PeriodWindow.Ord(latestYear, 12) : availToOrd ?? PeriodWindow.Ord(2025, 12);
@@ -71,10 +60,7 @@ internal static class EducationMapper
                     .ToList()))
             .ToList();
 
-        // Detail-table rows. Statuses keep the workbook's reading order
-        // (Completed-style first, Enrolled second); points are window-filtered.
-        // Assets with no in-window data still ship (the editor needs them; the
-        // client UI hides all-empty rows).
+        // Completed-style statuses sort first per the workbook's reading order.
         static int StatusRank(string status) => status.ToLowerInvariant() switch
         {
             "completed" or "completions" or "views" => 0,

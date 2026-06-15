@@ -8,11 +8,6 @@ using Microsoft.Identity.Client;
 
 namespace Panwar.Api.Services;
 
-/// <summary>
-/// Thrown when Microsoft Graph returns a non-success status. Carries the actual
-/// status code and Graph's own error message so callers can react (idempotency,
-/// surfacing a meaningful HTTP status) instead of collapsing everything to 500.
-/// </summary>
 public class GraphApiException : Exception
 {
     public HttpStatusCode StatusCode { get; }
@@ -21,10 +16,6 @@ public class GraphApiException : Exception
         => StatusCode = statusCode;
 }
 
-/// <summary>
-/// Calls Microsoft Graph API using client credentials (app-only) to manage
-/// app role assignments for the Employee SSO app registration.
-/// </summary>
 public class GraphService : IGraphService
 {
     private readonly ILogger<GraphService> _logger;
@@ -32,7 +23,6 @@ public class GraphService : IGraphService
     private readonly HttpClient _http;
     private readonly string _clientId;
 
-    // Cache the service principal ID + app role definitions (they don't change at runtime)
     private string? _servicePrincipalId;
     private Dictionary<string, (string Value, string DisplayName)>? _appRoles;
 
@@ -63,9 +53,7 @@ public class GraphService : IGraphService
         var token = await GetTokenAsync(cancellationToken);
         await EnsureAppMetadataAsync(token, cancellationToken);
 
-        // Get all users in the tenant
         var users = new List<GraphUser>();
-        // Only fetch member users (not guests) with a panwarhealth.com.au email
         var url = "https://graph.microsoft.com/v1.0/users?$select=id,displayName,mail,userPrincipalName&$filter=accountEnabled eq true and userType eq 'Member' and endsWith(userPrincipalName,'panwarhealth.com.au')&$count=true&$top=999";
 
         while (!string.IsNullOrEmpty(url))
@@ -87,7 +75,6 @@ public class GraphService : IGraphService
             url = result?.OdataNextLink;
         }
 
-        // Get all app role assignments for our service principal
         var assignments = new List<GraphRoleAssignmentDto>();
         var assignUrl = $"https://graph.microsoft.com/v1.0/servicePrincipals/{_servicePrincipalId}/appRoleAssignedTo?$top=999";
 
@@ -100,7 +87,6 @@ public class GraphService : IGraphService
             assignUrl = result?.OdataNextLink;
         }
 
-        // Map assignments to users
         var assignmentsByUser = assignments
             .Where(a => a.PrincipalType == "User")
             .GroupBy(a => a.PrincipalId)
@@ -122,8 +108,6 @@ public class GraphService : IGraphService
             }
         }
 
-        // Only return users who have at least signed in or have roles assigned
-        // (filter out system accounts, shared mailboxes, etc.)
         return users;
     }
 
@@ -132,12 +116,9 @@ public class GraphService : IGraphService
         var token = await GetTokenAsync(cancellationToken);
         await EnsureAppMetadataAsync(token, cancellationToken);
 
-        // App roles are matched by their string value (e.g. "medical-writer").
         var roleEntry = _appRoles!.FirstOrDefault(r => r.Value.Value == roleValue);
         if (roleEntry.Key is null)
-        {
             throw new InvalidOperationException($"Unknown app role: {roleValue}");
-        }
 
         var body = new
         {
@@ -160,9 +141,7 @@ public class GraphService : IGraphService
             when (ex.StatusCode == HttpStatusCode.BadRequest
                   && ex.Message.Contains("already exists", StringComparison.OrdinalIgnoreCase))
         {
-            // Idempotent: the user already holds this role. Return the existing
-            // assignment id so the caller ends up in the intended state instead
-            // of seeing an error for a no-op.
+            // Idempotent: role already assigned, return the existing assignment id.
             _logger.LogInformation("Role {Role} already assigned to user {UserId}; returning existing assignment",
                 roleValue, userObjectId);
             return await FindAssignmentIdAsync(token, userObjectId, roleEntry.Key!, cancellationToken) ?? "";
@@ -176,8 +155,7 @@ public class GraphService : IGraphService
 
         try
         {
-            // Use the user-centric endpoint to avoid the self-referential SP path
-            // which Graph sometimes rejects even with AppRoleAssignment.ReadWrite.All.
+            // User-centric endpoint avoids Graph rejecting self-referential SP deletes.
             await GraphDeleteAsync(token,
                 $"https://graph.microsoft.com/v1.0/users/{userObjectId}/appRoleAssignments/{assignmentId}",
                 cancellationToken);
@@ -189,11 +167,7 @@ public class GraphService : IGraphService
         }
     }
 
-    /// <summary>
-    /// Finds the existing appRoleAssignedTo id for a user + app role on our
-    /// service principal (used to recover the id when an assignment already
-    /// exists). The internal staff set is small, so a scan is fine.
-    /// </summary>
+    // Scans appRoleAssignedTo to recover an existing assignment id (small staff set, scan is fine).
     private async Task<string?> FindAssignmentIdAsync(
         string token, string userObjectId, string appRoleId, CancellationToken cancellationToken)
     {
@@ -219,7 +193,6 @@ public class GraphService : IGraphService
     {
         if (_servicePrincipalId is not null && _appRoles is not null) return;
 
-        // Find the service principal for our app
         var spJson = await GraphGetAsync(token,
             $"https://graph.microsoft.com/v1.0/servicePrincipals?$filter=appId eq '{_clientId}'",
             cancellationToken);
@@ -241,8 +214,7 @@ public class GraphService : IGraphService
     {
         using var req = new HttpRequestMessage(HttpMethod.Get, url);
         req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
-        // Required for advanced query filters (endsWith, $count, etc.)
-        req.Headers.Add("ConsistencyLevel", "eventual");
+        req.Headers.Add("ConsistencyLevel", "eventual"); // required for endsWith/$count filters
         var resp = await _http.SendAsync(req, ct);
         var body = await resp.Content.ReadAsStringAsync(ct);
         if (!resp.IsSuccessStatusCode)
@@ -281,7 +253,6 @@ public class GraphService : IGraphService
         }
     }
 
-    /// <summary>Pulls Graph's own error.message out of an error response body.</summary>
     private static string ExtractGraphMessage(string body)
     {
         try
@@ -295,12 +266,11 @@ public class GraphService : IGraphService
         }
         catch
         {
-            // Non-JSON or empty body - fall through to the generic message.
+            // non-JSON or empty body
         }
         return "Microsoft Graph request failed.";
     }
 
-    // Internal DTOs for Graph API deserialization
     private class GraphListResponse<T>
     {
         public List<T>? Value { get; set; }

@@ -5,45 +5,28 @@ namespace Panwar.Api.Data;
 
 public class AppDbContext : DbContext
 {
-    /// <summary>
-    /// All Panwar Portals tables live in this dedicated Postgres schema,
-    /// alongside (but isolated from) PharmaChat and Clinical Studio tables
-    /// in the same shared `panwarhealth-db` database.
-    /// </summary>
+    // Isolated from PharmaChat and other apps' tables in the same shared panwarhealth-db database.
     public const string SchemaName = "panwar_portals";
 
     public AppDbContext(DbContextOptions<AppDbContext> options) : base(options)
     {
     }
 
-    // Identity & tenancy
     public DbSet<Client> Clients { get; set; } = null!;
     public DbSet<Brand> Brands { get; set; } = null!;
     public DbSet<Audience> Audiences { get; set; } = null!;
     public DbSet<Publisher> Publishers { get; set; } = null!;
-
-    // Metric templates
     public DbSet<MetricTemplate> MetricTemplates { get; set; } = null!;
     public DbSet<MetricField> MetricFields { get; set; } = null!;
     public DbSet<PublisherTemplate> PublisherTemplates { get; set; } = null!;
-
-    // Baselines
     public DbSet<ClientPublisherBaseline> ClientPublisherBaselines { get; set; } = null!;
-
-    // Yearly analyst summaries
     public DbSet<ClientYearSummary> ClientYearSummaries { get; set; } = null!;
-
-    // Placements
     public DbSet<Placement> Placements { get; set; } = null!;
     public DbSet<PlacementKpi> PlacementKpis { get; set; } = null!;
     public DbSet<PlacementActual> PlacementActuals { get; set; } = null!;
     public DbSet<PlacementComment> PlacementComments { get; set; } = null!;
-
-    // Education
     public DbSet<EducationCourse> EducationCourses { get; set; } = null!;
     public DbSet<EducationCourseStatus> EducationCourseStatuses { get; set; } = null!;
-
-    // Education dashboards (named pages of completion bar charts)
     public DbSet<EducationPage> EducationPages { get; set; } = null!;
     public DbSet<EducationChart> EducationCharts { get; set; } = null!;
     public DbSet<EducationSeries> EducationSeries { get; set; } = null!;
@@ -51,21 +34,13 @@ public class AppDbContext : DbContext
     public DbSet<EducationAnnotation> EducationAnnotations { get; set; } = null!;
     public DbSet<EducationAsset> EducationAssets { get; set; } = null!;
     public DbSet<EducationAssetValue> EducationAssetValues { get; set; } = null!;
-
-    // UTM
     public DbSet<UtmLink> UtmLinks { get; set; } = null!;
     public DbSet<UtmLinkClicks> UtmLinkClicks { get; set; } = null!;
-
-    // Workflow
     public DbSet<MonthSnapshot> MonthSnapshots { get; set; } = null!;
-
-    // Users
     public DbSet<AppUser> Users { get; set; } = null!;
     public DbSet<UserClient> UserClients { get; set; } = null!;
     public DbSet<MagicLink> MagicLinks { get; set; } = null!;
     public DbSet<UserRole> UserRoles { get; set; } = null!;
-
-    // Audit
     public DbSet<AuditLog> AuditLogs { get; set; } = null!;
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
@@ -250,8 +225,7 @@ public class AppDbContext : DbContext
             entity.Property(e => e.EdmSubcategory).HasConversion<int>();
             entity.Property(e => e.EducationSubcategory).HasConversion<int>();
             entity.Property(e => e.AssetType).HasMaxLength(50);
-            entity.Property(e => e.CreativeCode).HasMaxLength(50);
-            entity.Property(e => e.OsCode).HasMaxLength(50);
+            entity.Property(e => e.OsCode).HasMaxLength(200);
             entity.Property(e => e.UtmUrl).HasMaxLength(2000);
             entity.Property(e => e.ArtworkUrl).HasMaxLength(500);
             entity.Property(e => e.MediaCost).HasColumnType("numeric(12,2)");

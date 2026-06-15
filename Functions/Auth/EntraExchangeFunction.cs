@@ -9,13 +9,6 @@ using Panwar.Api.Shared.Helpers;
 
 namespace Panwar.Api.Functions.Auth;
 
-/// <summary>
-/// POST /api/auth/entra/exchange  { "idToken": "..." }
-/// Validates an Entra ID token from the employee dash frontend, upserts
-/// the employee user, mints a panwar_session JWT, and sets the HttpOnly cookie.
-/// Roles come from Entra App Roles (defined in the app registration and
-/// assigned via Enterprise Applications → Users and groups).
-/// </summary>
 public class EntraExchangeFunction
 {
     private readonly ILogger<EntraExchangeFunction> _logger;
@@ -62,10 +55,7 @@ public class EntraExchangeFunction
                 return unauthorized;
             }
 
-            // Defence-in-depth: even if a user slips past Entra's "Assignment required"
-            // gate (misconfiguration, etc.), refuse to mint a session for someone with
-            // no app roles. The Entra-side assignment rule should prevent this too, but
-            // belt and braces.
+            // Belt-and-braces: "Assignment required" doesn't catch guest users with direct role grants.
             if (entraResult.Roles.Length == 0)
             {
                 _logger.LogWarning("Entra exchange blocked: {Email} has no app roles assigned",

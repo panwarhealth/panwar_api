@@ -11,12 +11,6 @@ using Panwar.Api.Shared.Extensions;
 
 namespace Panwar.Api.Functions.Admin;
 
-/// <summary>
-/// The analyst-written yearly summary for a client (the workbook's FY RESULTS
-/// commentary). One text per (client, year):
-///   GET /api/manage/clients/{clientSlug}/summary?year=YYYY
-///   PUT /api/manage/clients/{clientSlug}/summary   { year, text }  (empty text deletes)
-/// </summary>
 public class ManageYearSummaryFunction
 {
     private static readonly JsonSerializerOptions JsonOptions = new() { PropertyNameCaseInsensitive = true };
@@ -58,10 +52,7 @@ public class ManageYearSummaryFunction
             .AsNoTracking()
             .FirstOrDefaultAsync(s => s.ClientId == client.Id && s.Year == year, ct);
 
-        // Years the picker should offer: every year the client has placements
-        // for, plus any year that already has a summary. The Summary tab feeds
-        // this list to the shared workspace year picker, so it must cover the
-        // client's data years - not just years already written up.
+        // Year list covers placement years + summary years so the picker shows all writable years, not just already-written ones.
         var placementYears = await _context.Placements
             .AsNoTracking()
             .Where(p => p.Brand.ClientId == client.Id)
@@ -107,7 +98,6 @@ public class ManageYearSummaryFunction
 
         if (text.Length == 0)
         {
-            // Clearing the text removes the summary for that year.
             if (existing is not null)
             {
                 _context.ClientYearSummaries.Remove(existing);

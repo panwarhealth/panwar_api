@@ -15,13 +15,6 @@ using Panwar.Api.Shared.Extensions;
 
 namespace Panwar.Api.Functions.Admin;
 
-/// <summary>
-/// Placement CRUD for the employee portal's Dashboard Updater — the editor
-/// workflow behind each Reckitt-style card (artwork + commercials + KPI targets
-/// + monthly actuals). A placement is scoped to a client through its brand;
-/// publisher and template are shared registries. The template determines which
-/// metric keys are valid for KPIs and actuals.
-/// </summary>
 public class ManagePlacementsFunction
 {
     private static readonly JsonSerializerOptions JsonOptions = new() { PropertyNameCaseInsensitive = true };
@@ -44,8 +37,6 @@ public class ManagePlacementsFunction
         _context = context;
         _r2 = r2;
     }
-
-    // ── List ─────────────────────────────────────────────────────────────────
 
     [Function("ManageListPlacements")]
     public async Task<HttpResponseData> ListPlacements(
@@ -72,8 +63,7 @@ public class ManagePlacementsFunction
             query = query.Where(p => p.PublisherId == publisherId);
         if (int.TryParse(filters["year"], out var year))
         {
-            // A placement appears in a year if: its education range covers it, its
-            // eDM send falls in it, or (no dates) its reporting year matches.
+            // Date-shape branches mirror PeriodWindow.AppearsInWindow — no EF-friendly way to call it.
             query = query.Where(p =>
                 (p.EndDate != null && p.StartDate!.Value.Year <= year && p.EndDate!.Value.Year >= year)
                 || (p.StartDate != null && p.EndDate == null && p.StartDate!.Value.Year == year)
@@ -92,7 +82,7 @@ public class ManagePlacementsFunction
                 p.PublisherId, PublisherName = p.Publisher.Name,
                 p.TemplateId, TemplateCode = p.Template.Code,
                 p.Year, p.Name, p.Objective,
-                p.AssetType, p.CreativeCode, p.OsCode, p.ArtworkUrl,
+                p.AssetType, p.OsCode, p.ArtworkUrl,
                 p.LiveMonths, p.StartDate, p.EndDate,
                 p.EdmSubcategory, p.EducationSubcategory, p.GroupId,
                 p.MediaCost, p.PlannedMediaCost, p.CpdInvestmentCost,
@@ -110,7 +100,6 @@ public class ManagePlacementsFunction
             r.Name,
             r.Objective.ToString().ToLower(),
             r.AssetType,
-            r.CreativeCode,
             r.OsCode,
             r.ArtworkUrl,
             r.LiveMonths,
@@ -125,8 +114,6 @@ public class ManagePlacementsFunction
             r.IsBonus,
             r.IsCpdPackage)).ToList();
 
-        // Every reporting year that has placements for this client (unfiltered),
-        // expanding education ranges so multi-year buys offer all their years.
         var spans = await _context.Placements
             .AsNoTracking()
             .Where(p => p.Brand.ClientId == client.Id)
@@ -149,8 +136,6 @@ public class ManagePlacementsFunction
         return resp;
     }
 
-    // ── Detail ───────────────────────────────────────────────────────────────
-
     [Function("ManageGetPlacement")]
     public async Task<HttpResponseData> GetPlacement(
         [HttpTrigger(AuthorizationLevel.Anonymous, "get", Route = "manage/clients/{clientSlug}/placements/{placementId}")] HttpRequestData req,
@@ -172,8 +157,6 @@ public class ManagePlacementsFunction
         await resp.WriteAsJsonAsync(dto);
         return resp;
     }
-
-    // ── Create ───────────────────────────────────────────────────────────────
 
     [Function("ManageCreatePlacement")]
     public async Task<HttpResponseData> CreatePlacement(
@@ -206,7 +189,6 @@ public class ManagePlacementsFunction
             Name = data.Name.Trim(),
             Objective = result!.Objective,
             AssetType = Clean(data.AssetType),
-            CreativeCode = Clean(data.CreativeCode),
             OsCode = Clean(data.OsCode),
             UtmUrl = Clean(data.UtmUrl),
             ArtworkUrl = Clean(data.ArtworkUrl),
@@ -232,9 +214,7 @@ public class ManagePlacementsFunction
         };
         _context.Placements.Add(placement);
 
-        // Seed KPI targets from the client's targets for this publisher + template
-        // in the placement's year (eDM/education: the year it starts; others: the
-        // reporting year). The editor can override via PUT /kpis.
+        // Seed from the client's baselines; eDM/education use their start year, others use the reporting year.
         var targetYear = result.StartDate?.Year ?? data.Year;
         var seededKpis = await _context.ClientPublisherBaselines
             .Where(b => b.ClientId == client.Id
@@ -258,8 +238,6 @@ public class ManagePlacementsFunction
         await resp.WriteAsJsonAsync(dto);
         return resp;
     }
-
-    // ── Update ───────────────────────────────────────────────────────────────
 
     [Function("ManageUpdatePlacement")]
     public async Task<HttpResponseData> UpdatePlacement(
@@ -293,7 +271,6 @@ public class ManagePlacementsFunction
         placement.Name = data.Name.Trim();
         placement.Objective = result!.Objective;
         placement.AssetType = Clean(data.AssetType);
-        placement.CreativeCode = Clean(data.CreativeCode);
         placement.OsCode = Clean(data.OsCode);
         placement.UtmUrl = Clean(data.UtmUrl);
         placement.ArtworkUrl = Clean(data.ArtworkUrl);
@@ -323,8 +300,6 @@ public class ManagePlacementsFunction
         return resp;
     }
 
-    // ── Delete ───────────────────────────────────────────────────────────────
-
     [Function("ManageDeletePlacement")]
     public async Task<HttpResponseData> DeletePlacement(
         [HttpTrigger(AuthorizationLevel.Anonymous, "delete", Route = "manage/clients/{clientSlug}/placements/{placementId}")] HttpRequestData req,
@@ -343,8 +318,7 @@ public class ManagePlacementsFunction
             .FirstOrDefaultAsync(p => p.Id == id && p.Brand.ClientId == client.Id, ct);
         if (placement is null) return req.CreateResponse(HttpStatusCode.NoContent);
 
-        // KPIs, actuals and comments cascade at the DB level. Artwork in R2 is
-        // best-effort cleaned up; a failed delete there must not block the row removal.
+        // Artwork delete is best-effort — R2 failure must not block the DB row removal.
         if (!string.IsNullOrWhiteSpace(placement.ArtworkUrl))
         {
             try { await _r2.DeleteAsync(placement.ArtworkUrl, ct); }
@@ -355,8 +329,6 @@ public class ManagePlacementsFunction
         await _context.SaveChangesAsync(ct);
         return req.CreateResponse(HttpStatusCode.NoContent);
     }
-
-    // ── KPI targets ──────────────────────────────────────────────────────────
 
     [Function("ManageSetPlacementKpis")]
     public async Task<HttpResponseData> SetKpis(
@@ -390,7 +362,6 @@ public class ManagePlacementsFunction
             incoming[key] = kpi.TargetValue;  // last write wins on duplicate keys
         }
 
-        // Full replace: drop existing, insert the provided set.
         _context.PlacementKpis.RemoveRange(placement.Kpis);
         _context.PlacementKpis.AddRange(incoming.Select(kv => new PlacementKpi
         {
@@ -406,8 +377,6 @@ public class ManagePlacementsFunction
         await resp.WriteAsJsonAsync(dto);
         return resp;
     }
-
-    // ── Monthly actuals ──────────────────────────────────────────────────────
 
     [Function("ManageSetPlacementActuals")]
     public async Task<HttpResponseData> SetActuals(
@@ -432,8 +401,7 @@ public class ManagePlacementsFunction
         if (data is null) return await BadRequest(req, "Request body required");
 
         var validKeys = await StorableMetricKeys(placement.TemplateId, ct);
-        // Education spans a date range (possibly multiple years); every other
-        // template's actuals belong to the placement's single reporting year.
+        // Education actuals can span multiple years; all other templates are pinned to their reporting year.
         bool isRange = placement.StartDate is not null && placement.EndDate is not null;
         int rangeFromOrd = isRange ? PeriodWindow.Ord(placement.StartDate!.Value) : 0;
         int rangeToOrd = isRange ? PeriodWindow.Ord(placement.EndDate!.Value) : 0;
@@ -457,8 +425,6 @@ public class ManagePlacementsFunction
             }
         }
 
-        // Upsert by (year, month, metricKey); months absent from the payload are
-        // left as-is.
         foreach (var row in data.Actuals)
         {
             var key = row.MetricKey.Trim().ToLowerInvariant();
@@ -565,7 +531,6 @@ public class ManagePlacementsFunction
             Name = source.Name,
             Objective = source.Objective,
             AssetType = source.AssetType,
-            CreativeCode = source.CreativeCode,
             OsCode = source.OsCode,
             UtmUrl = source.UtmUrl,
             ArtworkUrl = source.ArtworkUrl,        // same creative
@@ -681,7 +646,6 @@ public class ManagePlacementsFunction
                 Name = p.Name,
                 Objective = p.Objective,
                 AssetType = p.AssetType,
-                CreativeCode = p.CreativeCode,
                 OsCode = p.OsCode,
                 UtmUrl = p.UtmUrl,
                 ArtworkUrl = p.ArtworkUrl,             // same creative
@@ -860,7 +824,6 @@ public class ManagePlacementsFunction
             p.Name,
             p.Objective.ToString().ToLower(),
             p.AssetType,
-            p.CreativeCode,
             p.OsCode,
             p.UtmUrl,
             p.ArtworkUrl,

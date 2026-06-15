@@ -9,12 +9,7 @@ using Panwar.Api.Services;
 
 namespace Panwar.Api.Functions.Auth;
 
-/// <summary>
-/// POST /api/auth/magic-link  { "email": "..." }
-/// Always returns 200 even for unknown emails (don't leak which addresses
-/// are valid). Rate-limited at 5 requests/minute per IP via the middleware,
-/// plus a 30-second per-email throttle in MagicLinkService.
-/// </summary>
+// Always returns 200 even for unknown emails — never leak which addresses are registered.
 public class MagicLinkRequestFunction
 {
     private readonly ILogger<MagicLinkRequestFunction> _logger;

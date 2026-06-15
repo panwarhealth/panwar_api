@@ -2,16 +2,8 @@ using Panwar.Api.Models;
 
 namespace Panwar.Api.Services;
 
-/// <summary>
-/// Month-granularity period helpers shared by the dashboard + summary services.
-/// A month is encoded as an ordinal (year*12 + month-1) so windows compare with
-/// simple integer arithmetic. Strings are "YYYY-MM".
-///
-/// Placement presence/targets branch on date shape (no template lookup needed):
-///   StartDate + EndDate  → education range (month-span overlap)
-///   StartDate only       → eDM send (single send month)
-///   neither              → LiveMonths placements + legacy eDMs (by reporting Year)
-/// </summary>
+// Month ordinal = year*12 + (month-1). Placement date shape determines presence/target logic:
+//   StartDate + EndDate → education range; StartDate only → eDM send; neither → LiveMonths/Year.
 internal static class PeriodWindow
 {
     public static int Ord(int year, int month) => year * 12 + (month - 1);
@@ -33,42 +25,24 @@ internal static class PeriodWindow
 
     public static string ToYm(int ord) => $"{ord / 12:D4}-{ord % 12 + 1:D2}";
 
-    /// <summary>
-    /// Whether a placement's metrics/presence fall inside the window. Education
-    /// ranges overlap; eDM sends land on a single month; everything else is
-    /// scoped to its reporting year.
-    /// </summary>
     public static bool AppearsInWindow(Placement p, int fromOrd, int toOrd)
     {
         if (p.StartDate is { } start)
         {
             if (p.EndDate is { } end)
             {
-                // Education range: any month overlap.
                 return Ord(start) <= toOrd && Ord(end) >= fromOrd;
             }
-            // eDM send: the send month is in the window.
             var o = Ord(start);
             return o >= fromOrd && o <= toOrd;
         }
-        // LiveMonths placements + legacy eDMs: belong to a reporting year.
         return p.Year >= fromOrd / 12 && p.Year <= toOrd / 12;
     }
 
-    /// <summary>
-    /// Whether a placement's cost counts toward the window. Cost always belongs
-    /// to the booking year, so a multi-year education buy contributes its spend
-    /// only in the year it was booked even though its metrics show across years.
-    /// </summary>
+    // Cost belongs to the booking year; a multi-year education buy contributes spend only in that year.
     public static bool CostsCountInWindow(Placement p, int fromOrd, int toOrd)
         => p.Year >= fromOrd / 12 && p.Year <= toOrd / 12;
 
-    /// <summary>
-    /// The month-ordinal span a placement is live over: its date range, its send
-    /// month, or its live months within its reporting year (whole year when no
-    /// live months are recorded). Used to extend the selectable period span to
-    /// planned placements that have no actuals yet.
-    /// </summary>
     public static (int fromOrd, int toOrd) LiveSpan(Placement p)
     {
         if (p.StartDate is { } start)
@@ -82,12 +56,6 @@ internal static class PeriodWindow
         return (Ord(p.Year, 1), Ord(p.Year, 12));
     }
 
-    /// <summary>
-    /// Fraction of a placement's annual KPI target attributable to the window.
-    /// Education ranges pro-rate by month overlap; eDM sends are all-or-nothing;
-    /// LiveMonths placements pro-rate by live months inside the window (placements
-    /// with no live months recorded spread evenly over their reporting year).
-    /// </summary>
     public static decimal TargetFraction(Placement p, int fromOrd, int toOrd)
     {
         if (p.StartDate is { } start)

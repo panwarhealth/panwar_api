@@ -7,11 +7,7 @@ using Panwar.Api.Models.Enums;
 
 namespace Panwar.Api.Services;
 
-/// <summary>
-/// HMAC-SHA256 JWT signing using a single shared secret. Mirrors the
-/// osteo_xchange_api pattern. Asymmetric keys + Key Vault would be more
-/// secure but the threat model doesn't justify it for an internal B2B portal.
-/// </summary>
+// HMAC-SHA256 JWT with a single shared secret. Asymmetric keys + Key Vault are out of scope for this B2B portal.
 public class JwtService : IJwtService
 {
     public const string ClaimUserType = "user_type";

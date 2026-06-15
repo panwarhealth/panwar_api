@@ -21,7 +21,7 @@ var host = new HostBuilder()
     })
     .ConfigureLogging(logging =>
     {
-        // Remove the default ApplicationInsights filter that blocks Information-level logs
+        // ApplicationInsights suppresses Information by default — remove the rule so our logs get through.
         logging.Services.Configure<LoggerFilterOptions>(options =>
         {
             LoggerFilterRule? defaultRule = options.Rules.FirstOrDefault(rule =>
@@ -34,8 +34,7 @@ var host = new HostBuilder()
     })
     .ConfigureServices((context, services) =>
     {
-        // camelCase JSON output across all WriteAsJsonAsync calls so the React frontends
-        // (which read camelCase) don't silently see undefined for every field.
+        // Isolated worker's default serialiser is PascalCase; camelCase is required for the React frontends.
         services.Configure<WorkerOptions>(workerOptions =>
         {
             workerOptions.Serializer = new JsonObjectSerializer(
@@ -62,7 +61,6 @@ var host = new HostBuilder()
 
         services.AddHttpClient();
 
-        // Auth + identity
         services.AddScoped<IAuthService, AuthService>();
         services.AddScoped<IJwtService, JwtService>();
         services.AddScoped<IMagicLinkService, MagicLinkService>();
@@ -70,15 +68,13 @@ var host = new HostBuilder()
         services.AddSingleton<IEntraTokenValidator, EntraTokenValidator>();
         services.AddSingleton<IGraphService, GraphService>();
 
-        // Infrastructure
         services.AddScoped<ICloudflareR2Service, CloudflareR2Service>();
 
-        // Read models for the client portal
         services.AddScoped<IDashboardService, DashboardService>();
         services.AddScoped<IClientSummaryService, ClientSummaryService>();
         services.AddScoped<IEducationService, EducationService>();
 
-        // Dashboard access policies (composed by the resolver)
+        // Multiple IDashboardAccessPolicy registrations are composed by the resolver.
         services.AddScoped<IDashboardAccessPolicy, EmployeeAccessPolicy>();
         services.AddScoped<IDashboardAccessPolicy, ClientMembershipAccessPolicy>();
         services.AddScoped<IDashboardAccessResolver, DashboardAccessResolver>();

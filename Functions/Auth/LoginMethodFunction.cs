@@ -10,19 +10,7 @@ using Panwar.Api.Models.Enums;
 
 namespace Panwar.Api.Functions.Auth;
 
-/// <summary>
-/// POST /api/auth/method  { "email": "..." } → { "method": "magic-link" | "entra" | "denied" }
-///
-/// The client portal calls this once the user enters their email. It decides
-/// which auth flow to use without leaking account existence (all valid inputs
-/// get a meaningful method, invalid ones get "denied" — same response time).
-///
-/// Rules (order matters):
-///   1. If a Client user exists with this email → magic-link
-///      (keeps the rob+client@panwarhealth.com.au plus-addressing hack working)
-///   2. Else if email ends in @panwarhealth.com.au → entra
-///   3. Else → denied
-/// </summary>
+// Rule order matters: known client emails → magic-link (allows staff plus-addressing); then @panwarhealth.com.au → entra; else → denied.
 public class LoginMethodFunction
 {
     private const string StaffDomainSuffix = "@panwarhealth.com.au";

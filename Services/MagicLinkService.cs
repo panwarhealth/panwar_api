@@ -70,7 +70,6 @@ public class MagicLinkService : IMagicLinkService
 
         record.UsedAt = DateTime.UtcNow;
 
-        // Opportunistic cleanup of expired tokens for the same email
         var expired = await _context.MagicLinks
             .Where(t => t.ExpiresAt < DateTime.UtcNow)
             .ToListAsync(cancellationToken);

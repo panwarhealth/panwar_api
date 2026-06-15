@@ -9,11 +9,7 @@ using Panwar.Api.Shared.Extensions;
 
 namespace Panwar.Api.Functions.Auth;
 
-/// <summary>
-/// GET /api/auth/me — returns the current user from the session cookie.
-/// Client-specific fields (brands, branding, etc.) live on separate endpoints
-/// because users can now belong to multiple clients.
-/// </summary>
+// Client-specific data (brands, branding) is on separate endpoints — users can belong to multiple clients.
 public class MeFunction
 {
     private readonly ILogger<MeFunction> _logger;

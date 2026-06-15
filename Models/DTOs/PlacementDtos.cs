@@ -14,7 +14,6 @@ public sealed record PlacementListItemDto(
     string Name,
     string Objective,
     string? AssetType,
-    string? CreativeCode,
     string? OsCode,
     string? ArtworkUrl,
     int[] LiveMonths,
@@ -44,7 +43,6 @@ public sealed record PlacementDetailDto(
     string Name,
     string Objective,
     string? AssetType,
-    string? CreativeCode,
     string? OsCode,
     string? UtmUrl,
     string? ArtworkUrl,
@@ -83,7 +81,6 @@ public class PlacementWriteRequest
     public string Name { get; set; } = "";
     public string Objective { get; set; } = "awareness";
     public string? AssetType { get; set; }
-    public string? CreativeCode { get; set; }
     public string? OsCode { get; set; }
     public string? UtmUrl { get; set; }
     public string? ArtworkUrl { get; set; }     // R2 object key from the artwork-upload-url endpoint
