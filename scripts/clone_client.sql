@@ -55,16 +55,16 @@ BEGIN
 
     INSERT INTO panwar_portals.placement (
         "Id", "BrandId", "AudienceId", "PublisherId", "TemplateId", "Name",
-        "Objective", "AssetType", "CreativeCode", "OsCode", "UtmUrl", "ArtworkUrl",
-        "MediaCost", "CpdInvestmentCost", "Circulation", "LiveMonths",
-        "IsBonus", "IsCpdPackage", "TargetCourseId",
+        "Objective", "OsCode", "ArtworkUrl",
+        "MediaCost", "Circulation", "LiveMonths",
+        "IsBonus", "TargetCourseId",
         "CreatedAt", "UpdatedAt"
     )
     SELECT
         pm.new_id, bm.new_id, am.new_id, p."PublisherId", p."TemplateId", p."Name",
-        p."Objective", p."AssetType", p."CreativeCode", p."OsCode", p."UtmUrl", p."ArtworkUrl",
-        p."MediaCost", p."CpdInvestmentCost", p."Circulation", p."LiveMonths",
-        p."IsBonus", p."IsCpdPackage", p."TargetCourseId",
+        p."Objective", p."OsCode", p."ArtworkUrl",
+        p."MediaCost", p."Circulation", p."LiveMonths",
+        p."IsBonus", p."TargetCourseId",
         now(), now()
     FROM panwar_portals.placement p
     JOIN placement_map pm ON p."Id" = pm.old_id
@@ -82,6 +82,18 @@ BEGIN
     SELECT gen_random_uuid(), pm.new_id, a."Year", a."Month", a."MetricKey", a."Value", a."Note"
     FROM panwar_portals.placement_actual a
     JOIN placement_map pm ON a."PlacementId" = pm.old_id;
+
+    -- 7. CPD investments — remap brand + audience FKs
+    INSERT INTO panwar_portals.cpd_investment (
+        "Id", "BrandId", "AudienceId", "PublisherId", "Year", "Title", "Format", "Cost", "Notes",
+        "CreatedAt", "UpdatedAt"
+    )
+    SELECT
+        gen_random_uuid(), bm.new_id, am.new_id, c."PublisherId", c."Year", c."Title", c."Format", c."Cost", c."Notes",
+        now(), now()
+    FROM panwar_portals.cpd_investment c
+    JOIN brand_map bm ON c."BrandId" = bm.old_id
+    JOIN audience_map am ON c."AudienceId" = am.old_id;
 
     RAISE NOTICE 'Cloned client % (id %) → % (id %)',
         source_slug, source_client_id, new_client_slug, new_client_id;

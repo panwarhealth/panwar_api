@@ -13,7 +13,6 @@ public sealed record PlacementListItemDto(
     int Year,
     string Name,
     string Objective,
-    string? AssetType,
     string? OsCode,
     string? ArtworkUrl,
     int[] LiveMonths,
@@ -24,9 +23,7 @@ public sealed record PlacementListItemDto(
     Guid? GroupId,
     decimal MediaCost,
     decimal? PlannedMediaCost,
-    decimal? CpdInvestmentCost,
-    bool IsBonus,
-    bool IsCpdPackage);
+    bool IsBonus);
 
 /// <summary>
 /// Full placement for the edit form, including KPI targets and monthly actuals.
@@ -42,9 +39,7 @@ public sealed record PlacementDetailDto(
     int Year,
     string Name,
     string Objective,
-    string? AssetType,
     string? OsCode,
-    string? UtmUrl,
     string? ArtworkUrl,
     string? ArtworkViewUrl,
     string? Comments,
@@ -57,9 +52,7 @@ public sealed record PlacementDetailDto(
     Guid? GroupId,
     decimal MediaCost,
     decimal? PlannedMediaCost,
-    decimal? CpdInvestmentCost,
     bool IsBonus,
-    bool IsCpdPackage,
     decimal? Circulation,
     int? PlacementsCount,
     Guid? TargetCourseId,
@@ -80,9 +73,7 @@ public class PlacementWriteRequest
     public int Year { get; set; }
     public string Name { get; set; } = "";
     public string Objective { get; set; } = "awareness";
-    public string? AssetType { get; set; }
     public string? OsCode { get; set; }
-    public string? UtmUrl { get; set; }
     public string? ArtworkUrl { get; set; }     // R2 object key from the artwork-upload-url endpoint
     public string? Comments { get; set; }
     public string? Notes { get; set; }
@@ -93,9 +84,7 @@ public class PlacementWriteRequest
     public string? EducationSubcategory { get; set; }   // module | article | podcast_webinar | clinical_audit | research_paper | quiz
     public decimal MediaCost { get; set; }
     public decimal? PlannedMediaCost { get; set; }
-    public decimal? CpdInvestmentCost { get; set; }
     public bool IsBonus { get; set; }
-    public bool IsCpdPackage { get; set; }
     public decimal? Circulation { get; set; }
     public int? PlacementsCount { get; set; }
     public Guid? TargetCourseId { get; set; }

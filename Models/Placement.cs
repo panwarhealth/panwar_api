@@ -19,7 +19,6 @@ public class Placement
     public int Year { get; set; }                     // reporting/financial year this buy belongs to (calendar year)
     public required string Name { get; set; }
     public PlacementObjective Objective { get; set; }
-    public string? AssetType { get; set; }            // banner, solus_edm, dps, ifc, etc.
 
     // Date semantics vary by template:
     //   eDM        — StartDate is the send date; EndDate is null.
@@ -34,7 +33,6 @@ public class Placement
     // into a single card on the client dashboard. Group key on read = GroupId ?? Id.
     public Guid? GroupId { get; set; }
     public string? OsCode { get; set; }               // "RT-M-Zv9qDM" — not unique; comma-separated when multiple
-    public string? UtmUrl { get; set; }
     public string? ArtworkUrl { get; set; }           // R2 key
     public string? Comments { get; set; }             // long-form markdown
     public string? Notes { get; set; }                // short internal notes
@@ -43,9 +41,7 @@ public class Placement
 
     public decimal MediaCost { get; set; }
     public decimal? PlannedMediaCost { get; set; }    // FY planned/budgeted spend (admin-entered) — for planned-vs-actual
-    public decimal? CpdInvestmentCost { get; set; }   // only for placements in a CPD package
     public bool IsBonus { get; set; }
-    public bool IsCpdPackage { get; set; }
 
     // Print-only (nullable for everything else)
     public decimal? Circulation { get; set; }

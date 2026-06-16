@@ -82,11 +82,11 @@ public class ManagePlacementsFunction
                 p.PublisherId, PublisherName = p.Publisher.Name,
                 p.TemplateId, TemplateCode = p.Template.Code,
                 p.Year, p.Name, p.Objective,
-                p.AssetType, p.OsCode, p.ArtworkUrl,
+                p.OsCode, p.ArtworkUrl,
                 p.LiveMonths, p.StartDate, p.EndDate,
                 p.EdmSubcategory, p.EducationSubcategory, p.GroupId,
-                p.MediaCost, p.PlannedMediaCost, p.CpdInvestmentCost,
-                p.IsBonus, p.IsCpdPackage,
+                p.MediaCost, p.PlannedMediaCost,
+                p.IsBonus,
             })
             .ToListAsync(ct);
 
@@ -99,7 +99,6 @@ public class ManagePlacementsFunction
             r.Year,
             r.Name,
             r.Objective.ToString().ToLower(),
-            r.AssetType,
             r.OsCode,
             r.ArtworkUrl,
             r.LiveMonths,
@@ -110,9 +109,7 @@ public class ManagePlacementsFunction
             r.GroupId,
             r.MediaCost,
             r.PlannedMediaCost,
-            r.CpdInvestmentCost,
-            r.IsBonus,
-            r.IsCpdPackage)).ToList();
+            r.IsBonus)).ToList();
 
         var spans = await _context.Placements
             .AsNoTracking()
@@ -188,9 +185,7 @@ public class ManagePlacementsFunction
             Year = data.Year,
             Name = data.Name.Trim(),
             Objective = result!.Objective,
-            AssetType = Clean(data.AssetType),
             OsCode = Clean(data.OsCode),
-            UtmUrl = Clean(data.UtmUrl),
             ArtworkUrl = Clean(data.ArtworkUrl),
             Comments = Clean(data.Comments),
             Notes = Clean(data.Notes),
@@ -201,9 +196,7 @@ public class ManagePlacementsFunction
             EducationSubcategory = result.EducationSubcategory,
             MediaCost = data.MediaCost,
             PlannedMediaCost = data.PlannedMediaCost,
-            CpdInvestmentCost = data.CpdInvestmentCost,
             IsBonus = data.IsBonus,
-            IsCpdPackage = data.IsCpdPackage,
             Circulation = data.Circulation,
             PlacementsCount = data.PlacementsCount,
             TargetCourseId = data.TargetCourseId,
@@ -270,9 +263,7 @@ public class ManagePlacementsFunction
         placement.Year = data.Year;
         placement.Name = data.Name.Trim();
         placement.Objective = result!.Objective;
-        placement.AssetType = Clean(data.AssetType);
         placement.OsCode = Clean(data.OsCode);
-        placement.UtmUrl = Clean(data.UtmUrl);
         placement.ArtworkUrl = Clean(data.ArtworkUrl);
         placement.Comments = Clean(data.Comments);
         placement.Notes = Clean(data.Notes);
@@ -283,9 +274,7 @@ public class ManagePlacementsFunction
         placement.EducationSubcategory = result.EducationSubcategory;
         placement.MediaCost = data.MediaCost;
         placement.PlannedMediaCost = data.PlannedMediaCost;
-        placement.CpdInvestmentCost = data.CpdInvestmentCost;
         placement.IsBonus = data.IsBonus;
-        placement.IsCpdPackage = data.IsCpdPackage;
         placement.Circulation = data.Circulation;
         placement.PlacementsCount = data.PlacementsCount;
         placement.TargetCourseId = data.TargetCourseId;
@@ -530,9 +519,7 @@ public class ManagePlacementsFunction
             Year = source.Year,
             Name = source.Name,
             Objective = source.Objective,
-            AssetType = source.AssetType,
             OsCode = source.OsCode,
-            UtmUrl = source.UtmUrl,
             ArtworkUrl = source.ArtworkUrl,        // same creative
             Comments = source.Comments,
             Notes = source.Notes,
@@ -544,9 +531,7 @@ public class ManagePlacementsFunction
             GroupId = source.GroupId ?? source.Id,
             MediaCost = source.MediaCost,
             PlannedMediaCost = source.PlannedMediaCost,
-            CpdInvestmentCost = source.CpdInvestmentCost,
             IsBonus = source.IsBonus,
-            IsCpdPackage = source.IsCpdPackage,
             Circulation = source.Circulation,
             PlacementsCount = source.PlacementsCount,
             TargetCourseId = source.TargetCourseId,
@@ -645,9 +630,7 @@ public class ManagePlacementsFunction
                 Year = data.ToYear,
                 Name = p.Name,
                 Objective = p.Objective,
-                AssetType = p.AssetType,
                 OsCode = p.OsCode,
-                UtmUrl = p.UtmUrl,
                 ArtworkUrl = p.ArtworkUrl,             // same creative
                 Comments = p.Comments,
                 Notes = p.Notes,
@@ -659,9 +642,7 @@ public class ManagePlacementsFunction
                 GroupId = null,                         // a new year's sends are a new group
                 MediaCost = 0m,                         // costs reset for the new year
                 PlannedMediaCost = p.PlannedMediaCost,  // carry the budget estimate
-                CpdInvestmentCost = null,
                 IsBonus = p.IsBonus,
-                IsCpdPackage = p.IsCpdPackage,
                 Circulation = p.Circulation,
                 PlacementsCount = p.PlacementsCount,
                 TargetCourseId = p.TargetCourseId,
@@ -762,7 +743,6 @@ public class ManagePlacementsFunction
         switch (template.Code)
         {
             case MetricTemplateCode.Edm:
-                if (data.StartDate is null) return ("An eDM placement needs a send date", null);
                 if (!PlacementEnumNames.TryParseEdm(data.EdmSubcategory, out var e))
                     return ("Select an eDM type: solus, sponsored content or banner", null);
                 startDate = data.StartDate;
@@ -823,9 +803,7 @@ public class ManagePlacementsFunction
             p.Year,
             p.Name,
             p.Objective.ToString().ToLower(),
-            p.AssetType,
             p.OsCode,
-            p.UtmUrl,
             p.ArtworkUrl,
             artworkViewUrl,
             p.Comments,
@@ -838,9 +816,7 @@ public class ManagePlacementsFunction
             p.GroupId,
             p.MediaCost,
             p.PlannedMediaCost,
-            p.CpdInvestmentCost,
             p.IsBonus,
-            p.IsCpdPackage,
             p.Circulation,
             p.PlacementsCount,
             p.TargetCourseId,

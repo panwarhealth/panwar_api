@@ -71,6 +71,13 @@ public class DashboardService : IDashboardService
         placements = placements.Where(p => PeriodWindow.AppearsInWindow(p, fromOrd, toOrd)).ToList();
         var allActuals = placements.SelectMany(p => p.Actuals).ToList();
 
+        int fromYear = fromOrd / 12, toYear = toOrd / 12;
+        var cpdInvestments = await _context.CpdInvestments.AsNoTracking()
+            .Where(c => c.BrandId == brand.Id && c.AudienceId == audience.Id && c.Year >= fromYear && c.Year <= toYear)
+            .ToListAsync(cancellationToken);
+        var cpdTotal = cpdInvestments.Sum(c => c.Cost);
+        var cpdByPublisher = cpdInvestments.GroupBy(c => c.PublisherId).ToDictionary(g => g.Key, g => g.Sum(c => c.Cost));
+
         bool InWindow(PlacementActual a)
         {
             var o = PeriodWindow.Ord(a.Year, a.Month);
@@ -110,7 +117,7 @@ public class DashboardService : IDashboardService
             PlacementCount: placements.Count,
             MediaCost: Costing(placements).Sum(p => p.MediaCost),
             PlannedMediaCost: PlannedSum(placements),
-            CpdInvestmentCost: Costing(placements).Sum(p => p.CpdInvestmentCost ?? 0),
+            CpdInvestmentCost: cpdTotal,
             Metrics: totalsMetrics,
             TargetMetrics: targetMetrics);
 
@@ -139,7 +146,7 @@ public class DashboardService : IDashboardService
                     PlacementCount: g.Count(),
                     MediaCost: Costing(g).Sum(p => p.MediaCost),
                     PlannedMediaCost: PlannedSum(g),
-                    CpdInvestmentCost: Costing(g).Sum(p => p.CpdInvestmentCost ?? 0),
+                    CpdInvestmentCost: cpdByPublisher.GetValueOrDefault(first.Id, 0m),
                     Metrics: pm,
                     TargetMetrics: tm);
             })
@@ -186,10 +193,8 @@ public class DashboardService : IDashboardService
                 PublisherName: rep.Publisher.Name,
                 PublisherSlug: rep.Publisher.Slug,
                 IsBonus: rep.IsBonus,
-                IsCpdPackage: rep.IsCpdPackage,
                 MediaCost: Costing(members).Sum(m => m.MediaCost),
                 PlannedMediaCost: PlannedSum(members),
-                CpdInvestmentCost: Costing(members).Sum(m => m.CpdInvestmentCost ?? 0) is var cpd && cpd > 0 ? cpd : (decimal?)null,
                 ArtworkViewUrl: artworkViewUrl,
                 LiveMonths: rep.LiveMonths,
                 MetricKeys: metricKeys,

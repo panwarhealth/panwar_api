@@ -74,10 +74,8 @@ public sealed record DashboardPlacementDto(
     string PublisherName,
     string PublisherSlug,
     bool IsBonus,
-    bool IsCpdPackage,
     decimal MediaCost,
     decimal? PlannedMediaCost,
-    decimal? CpdInvestmentCost,
     string? ArtworkViewUrl,
     int[] LiveMonths,
     /// <summary>Storable metric keys in template SortOrder — use to drive display order.</summary>

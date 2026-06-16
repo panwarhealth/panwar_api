@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 using Panwar.Api.Data;
@@ -11,9 +12,11 @@ using Panwar.Api.Data;
 namespace Panwar.Api.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    partial class AppDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260616030719_RenameCpdTitleAddFormat")]
+    partial class RenameCpdTitleAddFormat
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -330,7 +333,7 @@ namespace Panwar.Api.Migrations
                     b.ToTable("client_year_summary", "panwar_portals");
                 });
 
-            modelBuilder.Entity("Panwar.Api.Models.CpdInvestment", b =>
+            modelBuilder.Entity("Panwar.Api.Models.CpdPlacement", b =>
                 {
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
@@ -391,7 +394,7 @@ namespace Panwar.Api.Migrations
 
                     b.HasIndex("BrandId", "AudienceId", "Year");
 
-                    b.ToTable("cpd_investment", "panwar_portals");
+                    b.ToTable("cpd_placement", "panwar_portals");
                 });
 
             modelBuilder.Entity("Panwar.Api.Models.EducationAnnotation", b =>
@@ -1372,7 +1375,7 @@ namespace Panwar.Api.Migrations
                     b.Navigation("Client");
                 });
 
-            modelBuilder.Entity("Panwar.Api.Models.CpdInvestment", b =>
+            modelBuilder.Entity("Panwar.Api.Models.CpdPlacement", b =>
                 {
                     b.HasOne("Panwar.Api.Models.Audience", "Audience")
                         .WithMany()

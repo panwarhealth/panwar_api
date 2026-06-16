@@ -22,6 +22,7 @@ public class AppDbContext : DbContext
     public DbSet<ClientPublisherBaseline> ClientPublisherBaselines { get; set; } = null!;
     public DbSet<ClientYearSummary> ClientYearSummaries { get; set; } = null!;
     public DbSet<Placement> Placements { get; set; } = null!;
+    public DbSet<CpdInvestment> CpdInvestments { get; set; } = null!;
     public DbSet<PlacementKpi> PlacementKpis { get; set; } = null!;
     public DbSet<PlacementActual> PlacementActuals { get; set; } = null!;
     public DbSet<PlacementComment> PlacementComments { get; set; } = null!;
@@ -59,6 +60,7 @@ public class AppDbContext : DbContext
         ConfigureClientPublisherBaseline(modelBuilder);
         ConfigureClientYearSummary(modelBuilder);
         ConfigurePlacement(modelBuilder);
+        ConfigureCpdInvestment(modelBuilder);
         ConfigurePlacementKpi(modelBuilder);
         ConfigurePlacementActual(modelBuilder);
         ConfigurePlacementComment(modelBuilder);
@@ -224,13 +226,10 @@ public class AppDbContext : DbContext
             entity.Property(e => e.Objective).HasConversion<int>();
             entity.Property(e => e.EdmSubcategory).HasConversion<int>();
             entity.Property(e => e.EducationSubcategory).HasConversion<int>();
-            entity.Property(e => e.AssetType).HasMaxLength(50);
             entity.Property(e => e.OsCode).HasMaxLength(200);
-            entity.Property(e => e.UtmUrl).HasMaxLength(2000);
             entity.Property(e => e.ArtworkUrl).HasMaxLength(500);
             entity.Property(e => e.MediaCost).HasColumnType("numeric(12,2)");
             entity.Property(e => e.PlannedMediaCost).HasColumnType("numeric(12,2)");
-            entity.Property(e => e.CpdInvestmentCost).HasColumnType("numeric(12,2)");
             entity.Property(e => e.Circulation).HasColumnType("numeric(12,2)");
             entity.Property(e => e.LiveMonths).HasColumnType("integer[]");
             entity.Property(e => e.Year);
@@ -247,6 +246,30 @@ public class AppDbContext : DbContext
             entity.HasIndex(e => e.AudienceId);
             entity.HasIndex(e => e.PublisherId);
             entity.HasIndex(e => e.OsCode);
+            entity.HasIndex(e => new { e.BrandId, e.AudienceId, e.Year });
+        });
+    }
+
+    private static void ConfigureCpdInvestment(ModelBuilder modelBuilder)
+    {
+        modelBuilder.Entity<CpdInvestment>(entity =>
+        {
+            entity.ToTable("cpd_investment");
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Title).IsRequired().HasMaxLength(500);
+            entity.Property(e => e.Format).IsRequired().HasMaxLength(50);
+            entity.Property(e => e.Cost).HasColumnType("numeric(12,2)");
+            entity.Property(e => e.Notes).HasMaxLength(2000);
+            entity.Property(e => e.Year);
+            entity.Property(e => e.CreatedAt).HasDefaultValueSql("CURRENT_TIMESTAMP");
+            entity.Property(e => e.UpdatedAt).HasDefaultValueSql("CURRENT_TIMESTAMP");
+
+            entity.HasOne(e => e.Brand).WithMany().HasForeignKey(e => e.BrandId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(e => e.Audience).WithMany().HasForeignKey(e => e.AudienceId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(e => e.Publisher).WithMany().HasForeignKey(e => e.PublisherId).OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasIndex(e => e.BrandId);
+            entity.HasIndex(e => e.AudienceId);
             entity.HasIndex(e => new { e.BrandId, e.AudienceId, e.Year });
         });
     }

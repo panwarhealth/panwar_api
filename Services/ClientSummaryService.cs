@@ -75,6 +75,16 @@ public class ClientSummaryService : IClientSummaryService
 
         placements = placements.Where(p => PeriodWindow.AppearsInWindow(p, fromOrd, toOrd)).ToList();
 
+        int fromYear = fromOrd / 12, toYear = toOrd / 12;
+        var cpdInvestments = await _context.CpdInvestments.AsNoTracking()
+            .Where(c => c.Brand.ClientId == clientId && c.Year >= fromYear && c.Year <= toYear)
+            .ToListAsync(cancellationToken);
+        var cpdTotal = cpdInvestments.Sum(c => c.Cost);
+        var cpdByBrandAudience = cpdInvestments
+            .GroupBy(c => new { c.BrandId, c.AudienceId })
+            .ToDictionary(g => (g.Key.BrandId, g.Key.AudienceId), g => g.Sum(c => c.Cost));
+        var cpdByPublisher = cpdInvestments.GroupBy(c => c.PublisherId).ToDictionary(g => g.Key, g => g.Sum(c => c.Cost));
+
         bool InWindow(PlacementActual a)
         {
             var o = PeriodWindow.Ord(a.Year, a.Month);
@@ -114,7 +124,7 @@ public class ClientSummaryService : IClientSummaryService
             PlacementCount: placements.Count,
             MediaCost: Costing(placements).Sum(p => p.MediaCost),
             PlannedMediaCost: PlannedSum(placements),
-            CpdInvestmentCost: Costing(placements).Sum(p => p.CpdInvestmentCost ?? 0),
+            CpdInvestmentCost: cpdTotal,
             Metrics: WindowMetrics(placements),
             TargetMetrics: Targets(placements));
 
@@ -131,7 +141,7 @@ public class ClientSummaryService : IClientSummaryService
                     PlacementCount: list.Count,
                     MediaCost: Costing(list).Sum(p => p.MediaCost),
                     PlannedMediaCost: PlannedSum(list),
-                    CpdInvestmentCost: Costing(list).Sum(p => p.CpdInvestmentCost ?? 0),
+                    CpdInvestmentCost: cpdByBrandAudience.GetValueOrDefault((first.BrandId, first.AudienceId), 0m),
                     Metrics: WindowMetrics(list),
                     TargetMetrics: Targets(list));
             })
@@ -150,7 +160,7 @@ public class ClientSummaryService : IClientSummaryService
                     PlacementCount: list.Count,
                     MediaCost: Costing(list).Sum(p => p.MediaCost),
                     PlannedMediaCost: PlannedSum(list),
-                    CpdInvestmentCost: Costing(list).Sum(p => p.CpdInvestmentCost ?? 0),
+                    CpdInvestmentCost: cpdByPublisher.GetValueOrDefault(g.Key, 0m),
                     Metrics: WindowMetrics(list),
                     TargetMetrics: Targets(list));
             })
@@ -168,7 +178,7 @@ public class ClientSummaryService : IClientSummaryService
                 Objective: p.Objective.ToString(),
                 TemplateCode: PlacementEnumNames.ToName(p.Template.Code),
                 MediaCost: Costing(new[] { p }).Sum(x => x.MediaCost),
-                CpdInvestmentCost: Costing(new[] { p }).Sum(x => x.CpdInvestmentCost ?? 0),
+                CpdInvestmentCost: 0m,
                 Metrics: WindowMetrics(new[] { p }),
                 TargetMetrics: Targets(new[] { p })))
             .OrderBy(a => a.BrandName)

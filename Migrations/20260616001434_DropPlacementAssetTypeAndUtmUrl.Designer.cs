@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 using Panwar.Api.Data;
@@ -11,9 +12,11 @@ using Panwar.Api.Data;
 namespace Panwar.Api.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    partial class AppDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260616001434_DropPlacementAssetTypeAndUtmUrl")]
+    partial class DropPlacementAssetTypeAndUtmUrl
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -328,70 +331,6 @@ namespace Panwar.Api.Migrations
                         .IsUnique();
 
                     b.ToTable("client_year_summary", "panwar_portals");
-                });
-
-            modelBuilder.Entity("Panwar.Api.Models.CpdInvestment", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
-
-                    b.Property<Guid>("AudienceId")
-                        .HasColumnType("uuid");
-
-                    b.Property<Guid>("BrandId")
-                        .HasColumnType("uuid");
-
-                    b.Property<decimal>("Cost")
-                        .HasColumnType("numeric(12,2)");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("timestamp with time zone")
-                        .HasDefaultValueSql("CURRENT_TIMESTAMP");
-
-                    b.Property<Guid?>("CreatedBy")
-                        .HasColumnType("uuid");
-
-                    b.Property<string>("Format")
-                        .IsRequired()
-                        .HasMaxLength(50)
-                        .HasColumnType("character varying(50)");
-
-                    b.Property<string>("Notes")
-                        .HasMaxLength(2000)
-                        .HasColumnType("character varying(2000)");
-
-                    b.Property<Guid>("PublisherId")
-                        .HasColumnType("uuid");
-
-                    b.Property<string>("Title")
-                        .IsRequired()
-                        .HasMaxLength(500)
-                        .HasColumnType("character varying(500)");
-
-                    b.Property<DateTime>("UpdatedAt")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("timestamp with time zone")
-                        .HasDefaultValueSql("CURRENT_TIMESTAMP");
-
-                    b.Property<Guid?>("UpdatedBy")
-                        .HasColumnType("uuid");
-
-                    b.Property<int>("Year")
-                        .HasColumnType("integer");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("AudienceId");
-
-                    b.HasIndex("BrandId");
-
-                    b.HasIndex("PublisherId");
-
-                    b.HasIndex("BrandId", "AudienceId", "Year");
-
-                    b.ToTable("cpd_investment", "panwar_portals");
                 });
 
             modelBuilder.Entity("Panwar.Api.Models.EducationAnnotation", b =>
@@ -919,6 +858,9 @@ namespace Panwar.Api.Migrations
                     b.Property<string>("Comments")
                         .HasColumnType("text");
 
+                    b.Property<decimal?>("CpdInvestmentCost")
+                        .HasColumnType("numeric(12,2)");
+
                     b.Property<DateTime>("CreatedAt")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("timestamp with time zone")
@@ -940,6 +882,9 @@ namespace Panwar.Api.Migrations
                         .HasColumnType("uuid");
 
                     b.Property<bool>("IsBonus")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("IsCpdPackage")
                         .HasColumnType("boolean");
 
                     b.PrimitiveCollection<int[]>("LiveMonths")
@@ -1370,33 +1315,6 @@ namespace Panwar.Api.Migrations
                         .IsRequired();
 
                     b.Navigation("Client");
-                });
-
-            modelBuilder.Entity("Panwar.Api.Models.CpdInvestment", b =>
-                {
-                    b.HasOne("Panwar.Api.Models.Audience", "Audience")
-                        .WithMany()
-                        .HasForeignKey("AudienceId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
-                    b.HasOne("Panwar.Api.Models.Brand", "Brand")
-                        .WithMany()
-                        .HasForeignKey("BrandId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
-                    b.HasOne("Panwar.Api.Models.Publisher", "Publisher")
-                        .WithMany()
-                        .HasForeignKey("PublisherId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
-                    b.Navigation("Audience");
-
-                    b.Navigation("Brand");
-
-                    b.Navigation("Publisher");
                 });
 
             modelBuilder.Entity("Panwar.Api.Models.EducationAnnotation", b =>

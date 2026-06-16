@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 using Panwar.Api.Data;
@@ -11,9 +12,11 @@ using Panwar.Api.Data;
 namespace Panwar.Api.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    partial class AppDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260616015544_AddCpdPlacementDropPlacementCpd")]
+    partial class AddCpdPlacementDropPlacementCpd
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -330,11 +333,16 @@ namespace Panwar.Api.Migrations
                     b.ToTable("client_year_summary", "panwar_portals");
                 });
 
-            modelBuilder.Entity("Panwar.Api.Models.CpdInvestment", b =>
+            modelBuilder.Entity("Panwar.Api.Models.CpdPlacement", b =>
                 {
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
+
+                    b.Property<string>("ArticleTitle")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
 
                     b.Property<Guid>("AudienceId")
                         .HasColumnType("uuid");
@@ -353,22 +361,12 @@ namespace Panwar.Api.Migrations
                     b.Property<Guid?>("CreatedBy")
                         .HasColumnType("uuid");
 
-                    b.Property<string>("Format")
-                        .IsRequired()
-                        .HasMaxLength(50)
-                        .HasColumnType("character varying(50)");
-
                     b.Property<string>("Notes")
                         .HasMaxLength(2000)
                         .HasColumnType("character varying(2000)");
 
                     b.Property<Guid>("PublisherId")
                         .HasColumnType("uuid");
-
-                    b.Property<string>("Title")
-                        .IsRequired()
-                        .HasMaxLength(500)
-                        .HasColumnType("character varying(500)");
 
                     b.Property<DateTime>("UpdatedAt")
                         .ValueGeneratedOnAdd()
@@ -391,7 +389,7 @@ namespace Panwar.Api.Migrations
 
                     b.HasIndex("BrandId", "AudienceId", "Year");
 
-                    b.ToTable("cpd_investment", "panwar_portals");
+                    b.ToTable("cpd_placement", "panwar_portals");
                 });
 
             modelBuilder.Entity("Panwar.Api.Models.EducationAnnotation", b =>
@@ -1372,7 +1370,7 @@ namespace Panwar.Api.Migrations
                     b.Navigation("Client");
                 });
 
-            modelBuilder.Entity("Panwar.Api.Models.CpdInvestment", b =>
+            modelBuilder.Entity("Panwar.Api.Models.CpdPlacement", b =>
                 {
                     b.HasOne("Panwar.Api.Models.Audience", "Audience")
                         .WithMany()
