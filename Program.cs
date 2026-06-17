@@ -65,6 +65,7 @@ var host = new HostBuilder()
         services.AddScoped<IJwtService, JwtService>();
         services.AddScoped<IMagicLinkService, MagicLinkService>();
         services.AddScoped<IEmailService, EmailService>();
+        services.AddSingleton<IEmailTemplateService, EmailTemplateService>();
         services.AddSingleton<IEntraTokenValidator, EntraTokenValidator>();
         services.AddSingleton<IGraphService, GraphService>();
 

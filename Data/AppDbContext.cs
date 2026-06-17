@@ -43,6 +43,8 @@ public class AppDbContext : DbContext
     public DbSet<MagicLink> MagicLinks { get; set; } = null!;
     public DbSet<UserRole> UserRoles { get; set; } = null!;
     public DbSet<AuditLog> AuditLogs { get; set; } = null!;
+    public DbSet<ReportInvite> ReportInvites { get; set; } = null!;
+    public DbSet<InviteEvent> InviteEvents { get; set; } = null!;
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -61,6 +63,8 @@ public class AppDbContext : DbContext
         ConfigureClientYearSummary(modelBuilder);
         ConfigurePlacement(modelBuilder);
         ConfigureCpdInvestment(modelBuilder);
+        ConfigureReportInvite(modelBuilder);
+        ConfigureInviteEvent(modelBuilder);
         ConfigurePlacementKpi(modelBuilder);
         ConfigurePlacementActual(modelBuilder);
         ConfigurePlacementComment(modelBuilder);
@@ -271,6 +275,41 @@ public class AppDbContext : DbContext
             entity.HasIndex(e => e.BrandId);
             entity.HasIndex(e => e.AudienceId);
             entity.HasIndex(e => new { e.BrandId, e.AudienceId, e.Year });
+        });
+    }
+
+    private static void ConfigureReportInvite(ModelBuilder modelBuilder)
+    {
+        modelBuilder.Entity<ReportInvite>(entity =>
+        {
+            entity.ToTable("report_invite");
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.RecipientEmail).IsRequired().HasMaxLength(320);
+            entity.Property(e => e.Template).IsRequired().HasMaxLength(50);
+            entity.Property(e => e.Token).IsRequired().HasMaxLength(100);
+            entity.Property(e => e.CreatedAt).HasDefaultValueSql("CURRENT_TIMESTAMP");
+            entity.Property(e => e.UpdatedAt).HasDefaultValueSql("CURRENT_TIMESTAMP");
+
+            entity.HasOne(e => e.Client).WithMany().HasForeignKey(e => e.ClientId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(e => e.Recipient).WithMany().HasForeignKey(e => e.RecipientUserId).OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasIndex(e => e.Token).IsUnique();
+            entity.HasIndex(e => new { e.ClientId, e.RecipientUserId, e.Template, e.Year });
+        });
+    }
+
+    private static void ConfigureInviteEvent(ModelBuilder modelBuilder)
+    {
+        modelBuilder.Entity<InviteEvent>(entity =>
+        {
+            entity.ToTable("invite_event");
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Type).IsRequired().HasMaxLength(20);
+            entity.Property(e => e.Ip).HasMaxLength(64);
+            entity.Property(e => e.UserAgent).HasMaxLength(512);
+
+            entity.HasOne(e => e.Invite).WithMany(i => i.Events).HasForeignKey(e => e.InviteId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasIndex(e => new { e.InviteId, e.At });
         });
     }
 

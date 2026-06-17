@@ -31,6 +31,9 @@ public class EmailService : IEmailService
         await SendEmailAsync(toEmail, "Sign in to Panwar Health Portal", htmlBody, cancellationToken);
     }
 
+    public Task SendHtmlEmailAsync(string toEmail, string subject, string htmlBody, CancellationToken cancellationToken = default)
+        => SendEmailAsync(toEmail, subject, htmlBody, cancellationToken);
+
     private async Task SendEmailAsync(string toEmail, string subject, string htmlBody, CancellationToken cancellationToken)
     {
         try
