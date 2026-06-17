@@ -6,6 +6,8 @@ public sealed record CpdInvestmentListItemDto(
     Guid AudienceId, string AudienceName,
     Guid PublisherId, string PublisherName,
     int Year,
+    int? StartMonth,
+    int? EndMonth,
     string Title,
     string Format,
     decimal Cost,
@@ -21,6 +23,8 @@ public class CpdInvestmentWriteRequest
     public Guid AudienceId { get; set; }
     public Guid PublisherId { get; set; }
     public int Year { get; set; }
+    public int? StartMonth { get; set; }
+    public int? EndMonth { get; set; }
     public string Title { get; set; } = "";
     public string Format { get; set; } = "";
     public decimal Cost { get; set; }

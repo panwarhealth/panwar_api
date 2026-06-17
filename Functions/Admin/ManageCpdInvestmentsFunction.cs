@@ -51,6 +51,8 @@ public class ManageCpdInvestmentsFunction
                 c.AudienceId, c.Audience.Name,
                 c.PublisherId, c.Publisher.Name,
                 c.Year,
+                c.StartMonth,
+                c.EndMonth,
                 c.Title,
                 c.Format,
                 c.Cost,
@@ -89,6 +91,8 @@ public class ManageCpdInvestmentsFunction
             AudienceId = data.AudienceId,
             PublisherId = data.PublisherId,
             Year = data.Year,
+            StartMonth = data.StartMonth ?? data.EndMonth,
+            EndMonth = data.EndMonth ?? data.StartMonth,
             Title = data.Title.Trim(),
             Format = data.Format.Trim().ToLowerInvariant(),
             Cost = data.Cost,
@@ -133,6 +137,8 @@ public class ManageCpdInvestmentsFunction
         row.AudienceId = data.AudienceId;
         row.PublisherId = data.PublisherId;
         row.Year = data.Year;
+        row.StartMonth = data.StartMonth ?? data.EndMonth;
+        row.EndMonth = data.EndMonth ?? data.StartMonth;
         row.Title = data.Title.Trim();
         row.Format = data.Format.Trim().ToLowerInvariant();
         row.Cost = data.Cost;
@@ -172,6 +178,10 @@ public class ManageCpdInvestmentsFunction
         if (!CpdFormats.Allowed.Contains((data.Format ?? "").Trim())) return "Invalid format";
         if (data.Cost < 0) return "Cost must be >= 0";
         if (data.Year < 2000 || data.Year > 2100) return "Year is out of range";
+
+        if (data.StartMonth is { } sm && (sm < 1 || sm > 12)) return "Start month is out of range";
+        if (data.EndMonth is { } em && (em < 1 || em > 12)) return "End month is out of range";
+        if (data.StartMonth is { } s && data.EndMonth is { } e && s > e) return "Start month must be on or before end month";
 
         var brandOk = await _context.Brands.AnyAsync(b => b.Id == data.BrandId && b.ClientId == clientId, ct);
         if (!brandOk) return "Brand not found for this client";

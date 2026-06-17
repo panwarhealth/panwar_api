@@ -8,6 +8,8 @@ public class CpdInvestment
     public Guid PublisherId { get; set; }
 
     public int Year { get; set; }
+    public int? StartMonth { get; set; }
+    public int? EndMonth { get; set; }
     public required string Title { get; set; }
     public required string Format { get; set; }
     public decimal Cost { get; set; }
