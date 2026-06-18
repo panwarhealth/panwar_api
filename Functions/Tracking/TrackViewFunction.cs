@@ -35,12 +35,10 @@ public class TrackViewFunction
         if (data is null || string.IsNullOrWhiteSpace(data.Token))
             return req.CreateResponse(HttpStatusCode.NoContent);
 
+        // An authenticated session that loaded the dashboard with the email token is the gold signal -
+        // bot-proof (a scanner can't sign in and run JS), so we don't gate on which user it is.
         var invite = await _context.ReportInvites.FirstOrDefaultAsync(i => i.Token == data.Token, ct);
         if (invite is null) return req.CreateResponse(HttpStatusCode.NoContent);
-
-        var hasAccess = invite.RecipientUserId == userId.Value
-            || await _context.UserClients.AnyAsync(uc => uc.ClientId == invite.ClientId && uc.UserId == userId.Value, ct);
-        if (!hasAccess) return req.CreateResponse(HttpStatusCode.NoContent);
 
         var ua = req.Headers.TryGetValues("User-Agent", out var uaVals) ? uaVals.FirstOrDefault() : null;
 

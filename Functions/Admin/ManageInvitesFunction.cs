@@ -107,7 +107,7 @@ public class ManageInvitesFunction
             .ToListAsync(ct);
         if (members.Count == 0) return await BadRequest(req, "No valid recipients for this client");
 
-        var apiBase = (_configuration["API_BASE_URL"] ?? "http://localhost:7071").TrimEnd('/');
+        var apiBase = ApiBase(req);
         var template = data.Template.Trim().ToLowerInvariant();
         var templateFile = TemplateFile(template);
         var periodLabel = PeriodLabel(data.Year, data.StartMonth, data.EndMonth);
@@ -115,7 +115,7 @@ public class ManageInvitesFunction
         var now = DateTime.UtcNow;
         var userId = req.GetUserId(context);
 
-        var (previewLabel, previewBlock) = await BuildPreviewAsync(client.Id, data, ct);
+        var previewBlock = await BuildPreviewAsync(client.Id, data, ct);
 
         var sent = 0;
         var failed = new List<string>();
@@ -160,7 +160,6 @@ public class ManageInvitesFunction
                 ["recipientName"] = string.IsNullOrWhiteSpace(user.Name) ? "there" : user.Name!,
                 ["periodLabel"] = periodLabel,
                 ["ctaUrl"] = $"{apiBase}/api/r/{invite.Token}",
-                ["previewLabel"] = previewLabel,
                 ["year"] = DateTime.UtcNow.Year.ToString(CultureInfo.InvariantCulture),
             };
             var rawTokens = new Dictionary<string, string> { ["previewBlock"] = previewBlock };
@@ -204,7 +203,7 @@ public class ManageInvitesFunction
 
         var template = data.Template.Trim().ToLowerInvariant();
         var periodLabel = PeriodLabel(data.Year, data.StartMonth, data.EndMonth);
-        var (previewLabel, previewBlock) = await BuildPreviewAsync(client.Id, data, ct);
+        var previewBlock = await BuildPreviewAsync(client.Id, data, ct);
 
         var tokens = new Dictionary<string, string>
         {
@@ -212,7 +211,6 @@ public class ManageInvitesFunction
             ["recipientName"] = "there",
             ["periodLabel"] = periodLabel,
             ["ctaUrl"] = "#",
-            ["previewLabel"] = previewLabel,
             ["year"] = DateTime.UtcNow.Year.ToString(CultureInfo.InvariantCulture),
         };
         var rawTokens = new Dictionary<string, string> { ["previewBlock"] = previewBlock };
@@ -236,7 +234,7 @@ public class ManageInvitesFunction
         return null;
     }
 
-    private async Task<(string Label, string Block)> BuildPreviewAsync(Guid clientId, SendInvitesRequest data, CancellationToken ct)
+    private async Task<string> BuildPreviewAsync(Guid clientId, SendInvitesRequest data, CancellationToken ct)
     {
         var mode = (data.PreviewMode ?? "").Trim().ToLowerInvariant();
 
@@ -244,16 +242,35 @@ public class ManageInvitesFunction
         {
             var note = data.PreviewNote?.Trim();
             return string.IsNullOrWhiteSpace(note)
-                ? ("", "")
-                : ("Highlight", BuildNoteBlock(WebUtility.HtmlEncode(note)));
+                ? ""
+                : PreviewSection("Highlight", BuildNoteBlock(WebUtility.HtmlEncode(note)));
         }
 
-        if (mode == PreviewModes.Stats)
+        if (mode is PreviewModes.Stats or PreviewModes.Chart or PreviewModes.Summary)
         {
             var from = string.Format(CultureInfo.InvariantCulture, "{0:0000}-{1:00}", data.Year, data.StartMonth ?? 1);
             var to = string.Format(CultureInfo.InvariantCulture, "{0:0000}-{1:00}", data.Year, data.EndMonth ?? 12);
             var summary = await _summaryService.GetSummaryAsync(clientId, from, to, ct);
-            if (summary is null) return ("", "");
+            if (summary is null) return "";
+
+            if (mode == PreviewModes.Summary)
+            {
+                var text = summary.Summary?.Text?.Trim();
+                return string.IsNullOrWhiteSpace(text)
+                    ? ""
+                    : PreviewSection("From your report - summary excerpt", BuildSummaryBlock(WebUtility.HtmlEncode(Excerpt(text, 320))));
+            }
+
+            if (mode == PreviewModes.Chart)
+            {
+                var bars = summary.ByBrandAudience
+                    .Select(r => (Label: r.Label, Value: r.MediaCost + r.CpdInvestmentCost))
+                    .Where(b => b.Value > 0)
+                    .OrderByDescending(b => b.Value)
+                    .Take(5)
+                    .ToList();
+                return bars.Count == 0 ? "" : PreviewSection("From your report - spend by brand", BuildChartBlock(bars));
+            }
 
             var spend = summary.Totals.MediaCost + summary.Totals.CpdInvestmentCost;
 
@@ -272,27 +289,71 @@ public class ManageInvitesFunction
                 ? Math.Round(actual / target * 100m).ToString("0", CultureInfo.InvariantCulture) + "%"
                 : "-";
 
-            return ("At a glance", BuildStatsBlock(CompactCurrency(spend), CompactNumber(engagements), vsKpi));
+            return PreviewSection("From your report - at a glance", BuildStatsBlock(CompactCurrency(spend), CompactNumber(engagements), vsKpi));
         }
 
-        return ("", "");
+        return "";
+    }
+
+    // Eyebrow label + content + bottom spacing. Empty when no preview, so the whole section collapses.
+    private static string PreviewSection(string label, string inner) =>
+        $@"<table cellpadding=""0"" cellspacing=""0"" border=""0"" width=""100%"">
+  <tr><td style=""font-family:Arial,Helvetica,sans-serif;font-size:11px;font-weight:600;color:#aaaaaa;text-transform:uppercase;letter-spacing:0.8px;padding:0 0 10px;"">{WebUtility.HtmlEncode(label)}</td></tr>
+  <tr><td style=""padding:0 0 36px;"">{inner}</td></tr>
+</table>";
+
+    private static string Excerpt(string text, int max)
+    {
+        if (text.Length <= max) return text;
+        var cut = text.LastIndexOf(' ', max);
+        return text[..(cut > 0 ? cut : max)].TrimEnd() + "...";
+    }
+
+    private static string TruncateLabel(string s, int max) =>
+        s.Length <= max ? s : s[..(max - 1)].TrimEnd() + "…";
+
+    private static string BuildChartBlock(IReadOnlyList<(string Label, decimal Value)> bars)
+    {
+        var max = bars.Max(b => b.Value);
+        var rows = string.Concat(bars.Select(b =>
+        {
+            var pct = max > 0 ? (int)Math.Round(b.Value / max * 100m) : 0;
+            if (pct < 2) pct = 2;
+            return $@"<tr>
+    <td valign=""middle"" width=""50%"" style=""width:50%;font-family:Arial,Helvetica,sans-serif;font-size:12px;color:#555555;white-space:nowrap;padding:6px 10px 6px 0;"">{WebUtility.HtmlEncode(TruncateLabel(b.Label, 26))}</td>
+    <td valign=""middle"" width=""100%"" style=""padding:6px 0;"">
+      <table cellpadding=""0"" cellspacing=""0"" border=""0"" width=""100%""><tr>
+        <td width=""{pct}%"" bgcolor=""#702f8f"" style=""height:14px;border-radius:3px;font-size:0;line-height:0;mso-line-height-rule:exactly;"">&nbsp;</td>
+        <td style=""font-size:0;line-height:0;"">&nbsp;</td>
+      </tr></table>
+    </td>
+    <td valign=""middle"" style=""font-family:Arial,Helvetica,sans-serif;font-size:13px;font-weight:700;color:#702f8f;padding:6px 0 6px 10px;white-space:nowrap;text-align:right;"">{CompactCurrency(b.Value)}</td>
+  </tr>";
+        }));
+        return PreviewCard($@"<table cellpadding=""0"" cellspacing=""0"" border=""0"" width=""100%"">{rows}</table>");
     }
 
     private static string BuildStatsBlock(string spend, string engagements, string vsKpi)
     {
-        string Cell(string label, string value) =>
-            $@"<td align=""center"" valign=""top"" style=""padding:18px 12px;background-color:#f9f7fc;width:33%;font-family:Arial,Helvetica,sans-serif;"">
-      <span style=""display:block;font-size:11px;color:#999999;text-transform:uppercase;letter-spacing:0.6px;line-height:16px;margin-bottom:8px;"">{label}</span>
-      <span style=""display:block;font-size:26px;font-weight:700;color:#702f8f;line-height:1.1;"">{value}</span>
-    </td>";
-        const string divider = @"<td style=""width:1px;background-color:#e5e5e5;font-size:0;line-height:0;mso-line-height-rule:exactly;"">&nbsp;</td>";
-        return $@"<table cellpadding=""0"" cellspacing=""0"" border=""0"" width=""100%"">
-  <tr><td style=""height:3px;background-color:#702f8f;font-size:0;line-height:0;mso-line-height-rule:exactly;"">&nbsp;</td></tr>
-</table>
-<table cellpadding=""0"" cellspacing=""0"" border=""0"" width=""100%"">
-  <tr>{Cell("Spend (incl. CPD)", spend)}{divider}{Cell("Engagements", engagements)}{divider}{Cell("vs KPI", vsKpi)}</tr>
-</table>";
+        string LabelCell(string label) =>
+            $@"<td align=""center"" valign=""top"" height=""15"" style=""width:33%;height:15px;padding:0 6px;font-family:Arial,Helvetica,sans-serif;font-size:10px;color:#999999;text-transform:uppercase;letter-spacing:0.3px;line-height:13px;"">{label}</td>";
+        string ValueCell(string value) =>
+            $@"<td align=""center"" valign=""top"" style=""width:33%;padding:8px 6px 0;font-family:Arial,Helvetica,sans-serif;font-size:22px;font-weight:700;color:#702f8f;line-height:1.1;white-space:nowrap;"">{value}</td>";
+        const string divider = @"<td rowspan=""2"" width=""1"" bgcolor=""#e5e0ee"" style=""width:1px;font-size:0;line-height:0;mso-line-height-rule:exactly;"">&nbsp;</td>";
+        return PreviewCard($@"<table cellpadding=""0"" cellspacing=""0"" border=""0"" width=""100%"">
+  <tr>{LabelCell("Spend")}{divider}{LabelCell("Engagement")}{divider}{LabelCell("vs KPI")}</tr>
+  <tr>{ValueCell(spend)}{ValueCell(engagements)}{ValueCell(vsKpi)}</tr>
+</table>");
     }
+
+    private static string BuildSummaryBlock(string text) =>
+        PreviewCard($@"<div style=""font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:23px;color:#8a8a8a;font-style:italic;"">{text}</div>");
+
+    // A framed panel that reads as a peek into the report, distinct from the email's own copy.
+    private static string PreviewCard(string inner) =>
+        $@"<table cellpadding=""0"" cellspacing=""0"" border=""0"" width=""100%"" style=""border:1px solid #e2dcef;border-radius:8px;background-color:#faf9fd;"">
+  <tr><td style=""padding:16px 18px;"">{inner}</td></tr>
+</table>";
 
     private static string BuildNoteBlock(string note) =>
         $@"<table cellpadding=""0"" cellspacing=""0"" border=""0"" width=""100%"">
@@ -329,6 +390,21 @@ public class ManageInvitesFunction
         return startMonth == endMonth
             ? $"{Name(startMonth.Value)} {year}"
             : $"{Name(startMonth.Value)} - {Name(endMonth.Value)} {year}";
+    }
+
+    // The email's tracked link points back at this API. Derive the public base from the
+    // request (custom domain / forwarded host) so no extra App Setting is needed; an
+    // optional API_BASE_URL override still wins if set.
+    private string ApiBase(HttpRequestData req)
+    {
+        var configured = _configuration["API_BASE_URL"];
+        if (!string.IsNullOrWhiteSpace(configured)) return configured.TrimEnd('/');
+
+        var host = req.Headers.TryGetValues("X-Forwarded-Host", out var h) ? h.FirstOrDefault()?.Split(',')[0].Trim() : null;
+        var proto = req.Headers.TryGetValues("X-Forwarded-Proto", out var p) ? p.FirstOrDefault()?.Split(',')[0].Trim() : null;
+        return !string.IsNullOrEmpty(host)
+            ? $"{(string.IsNullOrEmpty(proto) ? req.Url.Scheme : proto)}://{host}"
+            : req.Url.GetLeftPart(UriPartial.Authority);
     }
 
     private static string GenerateToken()

@@ -30,12 +30,14 @@ public class SendInvitesRequest
 public static class PreviewModes
 {
     public const string Stats = "stats";
+    public const string Chart = "chart";
+    public const string Summary = "summary";
     public const string Note = "note";
     public const string None = "none";
 
     public static readonly IReadOnlySet<string> Allowed = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
     {
-        Stats, Note, None,
+        Stats, Chart, Summary, Note, None,
     };
 }
 
