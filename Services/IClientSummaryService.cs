@@ -12,5 +12,6 @@ public interface IClientSummaryService
         Guid clientId,
         string? from,
         string? to,
+        string? brandSlug,
         CancellationToken cancellationToken);
 }

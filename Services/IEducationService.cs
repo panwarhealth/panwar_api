@@ -8,7 +8,8 @@ namespace Panwar.Api.Services;
 /// </summary>
 public interface IEducationService
 {
-    Task<EducationPagesResponse> GetPagesAsync(Guid clientId, CancellationToken cancellationToken);
+    Task<EducationPagesResponse> GetPagesAsync(
+        Guid clientId, string? from, string? to, CancellationToken cancellationToken);
 
     Task<EducationPageResponse?> GetPageAsync(
         Guid clientId, string pageSlug, string? from, string? to, CancellationToken cancellationToken);

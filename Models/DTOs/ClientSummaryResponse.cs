@@ -15,6 +15,12 @@ public sealed record ClientSummaryResponse(
     DashboardTotalsDto Totals,
     IReadOnlyList<SummaryRowDto> ByBrandAudience,
     IReadOnlyList<SummaryRowDto> ByPublisher,
+    /// <summary>Per-category rollup (Digital / Print / Education) — same shape as ByPublisher.</summary>
+    IReadOnlyList<SummaryRowDto> ByCategory,
+    /// <summary>Per-digital-format rollup (eDM Solus/Spon Con/Banners, Digital Display, Spon Con) — digital placements only.</summary>
+    IReadOnlyList<SummaryRowDto> ByDigitalFormat,
+    /// <summary>Brands present in the window (for the performance-card brand filter), with display colour.</summary>
+    IReadOnlyList<BrandRefDto> Brands,
     /// <summary>True when the window has no actuals — the dashboard shows a plan, not results.</summary>
     bool IsPlan,
     /// <summary>Analyst-written summary for the window's end year; null when none exists.</summary>
@@ -34,9 +40,19 @@ public sealed record YearSummaryDto(int Year, string Text);
 public sealed record BrandMonthlyDto(
     string Label,
     string BrandSlug,
-    IReadOnlyList<DashboardMonthDto> Months);
+    IReadOnlyList<BrandMonthlyPointDto> Months);
+
+/// <summary>One month's per-brand metrics, split so the client can toggle Digital / Print / All. Metrics = all categories.</summary>
+public sealed record BrandMonthlyPointDto(
+    int Year,
+    int Month,
+    IReadOnlyDictionary<string, decimal> Metrics,
+    IReadOnlyDictionary<string, decimal> DigitalMetrics,
+    IReadOnlyDictionary<string, decimal> PrintMetrics);
 
 public sealed record ClientSummaryClientDto(Guid Id, string Name, string Slug);
+
+public sealed record BrandRefDto(string Slug, string Name, string? Color);
 
 /// <summary>
 /// One rollup row. For brand×audience rows <see cref="BrandSlug"/>/<see cref="AudienceSlug"/>

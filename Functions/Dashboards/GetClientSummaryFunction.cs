@@ -57,7 +57,8 @@ public class GetClientSummaryFunction
             if (!canAccess) return await NotFoundAsync(req); // 404 not 403 — don't leak existence
 
             var query = System.Web.HttpUtility.ParseQueryString(req.Url.Query);
-            var summary = await _summaryService.GetSummaryAsync(client.Id, query["from"], query["to"], ct);
+            var summary = await _summaryService.GetSummaryAsync(
+                client.Id, query["from"], query["to"], query["brand"], ct);
             if (summary is null) return await NotFoundAsync(req);
 
             var response = req.CreateResponse(HttpStatusCode.OK);

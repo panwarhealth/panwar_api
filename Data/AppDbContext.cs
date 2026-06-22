@@ -101,7 +101,8 @@ public class AppDbContext : DbContext
             entity.Property(e => e.ShowPublisherChart).HasDefaultValue(true);
             entity.Property(e => e.CreatedAt).HasDefaultValueSql("CURRENT_TIMESTAMP");
             entity.Property(e => e.UpdatedAt).HasDefaultValueSql("CURRENT_TIMESTAMP");
-            entity.HasIndex(e => e.Slug).IsUnique();
+            entity.HasIndex(e => e.Slug).IsUnique().HasFilter("\"DeletedAt\" IS NULL");
+            entity.HasQueryFilter(e => e.DeletedAt == null);
         });
     }
 

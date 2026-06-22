@@ -46,7 +46,9 @@ public class GetEducationFunction
             var (client, denied) = await ResolveAsync(req, context, clientSlug);
             if (denied is not null) return denied;
 
-            var result = await _education.GetPagesAsync(client!.Id, context.CancellationToken);
+            var query = System.Web.HttpUtility.ParseQueryString(req.Url.Query);
+            var result = await _education.GetPagesAsync(
+                client!.Id, query["from"], query["to"], context.CancellationToken);
             var resp = req.CreateResponse(HttpStatusCode.OK);
             await resp.WriteAsJsonAsync(result);
             return resp;

@@ -17,6 +17,7 @@ public class Client
 
     public DateTime CreatedAt { get; set; }
     public DateTime UpdatedAt { get; set; }
+    public DateTime? DeletedAt { get; set; }
 
     public ICollection<Brand> Brands { get; set; } = new List<Brand>();
     public ICollection<Audience> Audiences { get; set; } = new List<Audience>();

@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using Panwar.Api.Data;
 using Panwar.Api.Models;
 using Panwar.Api.Models.DTOs;
+using Panwar.Api.Models.Enums;
 
 namespace Panwar.Api.Services;
 
@@ -20,6 +21,7 @@ public class ClientSummaryService : IClientSummaryService
         Guid clientId,
         string? from,
         string? to,
+        string? brandSlug,
         CancellationToken cancellationToken)
     {
         var client = await _context.Clients.AsNoTracking()
@@ -36,6 +38,8 @@ public class ClientSummaryService : IClientSummaryService
             .Include(p => p.Actuals)
             .Where(p => p.Brand.ClientId == clientId)
             .ToListAsync(cancellationToken);
+
+        PlacementMetrics.EnsurePrintImpressions(placements);
 
         // Available span covers actuals AND live periods so planned future years are selectable.
         // Default window is the latest year with actuals; falls back to the latest planned year.
@@ -67,6 +71,30 @@ public class ClientSummaryService : IClientSummaryService
             availToOrd = Math.Max(availToOrd ?? summaryToOrd, summaryToOrd);
         }
 
+        var eduSpans = await _context.EducationPages
+            .AsNoTracking()
+            .Where(p => p.ClientId == clientId)
+            .Select(p => new
+            {
+                ValMin = p.Assets.SelectMany(a => a.Values).Min(v => (int?)v.Year),
+                ValMax = p.Assets.SelectMany(a => a.Values).Max(v => (int?)v.Year),
+                PtMin = p.Charts.SelectMany(c => c.Series).SelectMany(s => s.DataPoints).Min(d => (int?)d.Year),
+                PtMax = p.Charts.SelectMany(c => c.Series).SelectMany(s => s.DataPoints).Max(d => (int?)d.Year),
+            })
+            .ToListAsync(cancellationToken);
+        var eduYears = eduSpans
+            .SelectMany(s => new[] { s.ValMin, s.ValMax, s.PtMin, s.PtMax })
+            .Where(y => y.HasValue)
+            .Select(y => y!.Value)
+            .ToList();
+        if (eduYears.Count > 0)
+        {
+            var eduFromOrd = PeriodWindow.Ord(eduYears.Min(), 1);
+            var eduToOrd = PeriodWindow.Ord(eduYears.Max(), 12);
+            availFromOrd = Math.Min(availFromOrd ?? eduFromOrd, eduFromOrd);
+            availToOrd = Math.Max(availToOrd ?? eduToOrd, eduToOrd);
+        }
+
         int latestYear = (actualToOrd ?? availToOrd).HasValue ? (actualToOrd ?? availToOrd)!.Value / 12 : FallbackYear;
 
         var fromOrd = PeriodWindow.TryParse(from, out var f) ? f : PeriodWindow.Ord(latestYear, 1);
@@ -75,9 +103,13 @@ public class ClientSummaryService : IClientSummaryService
 
         placements = placements.Where(p => PeriodWindow.AppearsInWindow(p, fromOrd, toOrd)).ToList();
 
+        if (!string.IsNullOrWhiteSpace(brandSlug))
+            placements = placements.Where(p => p.Brand.Slug == brandSlug).ToList();
+
         int fromYear = fromOrd / 12, toYear = toOrd / 12;
         var cpdInvestments = await _context.CpdInvestments.AsNoTracking()
             .Where(c => c.Brand.ClientId == clientId && c.Year >= fromYear && c.Year <= toYear)
+            .Where(c => string.IsNullOrWhiteSpace(brandSlug) || c.Brand.Slug == brandSlug)
             .ToListAsync(cancellationToken);
         var cpdTotal = cpdInvestments.Sum(c => c.Cost);
         var cpdByBrandAudience = cpdInvestments
@@ -168,6 +200,55 @@ public class ClientSummaryService : IClientSummaryService
             .ThenBy(r => r.Label)
             .ToList();
 
+        var byCategory = placements
+            .GroupBy(p => CategoryOf(p.Template.Code))
+            .Select(g =>
+            {
+                var list = g.ToList();
+                return new SummaryRowDto(
+                    Label: g.Key,
+                    BrandSlug: null,
+                    AudienceSlug: null,
+                    PlacementCount: list.Count,
+                    MediaCost: Costing(list).Sum(p => p.MediaCost),
+                    PlannedMediaCost: PlannedSum(list),
+                    CpdInvestmentCost: 0m,
+                    Metrics: WindowMetrics(list),
+                    TargetMetrics: Targets(list));
+            })
+            .OrderByDescending(r => r.MediaCost)
+            .ThenBy(r => r.Label)
+            .ToList();
+
+        var byDigitalFormat = placements
+            .Select(p => new { Placement = p, Format = DigitalFormatOf(p.Template.Code, p.EdmSubcategory) })
+            .Where(x => x.Format != null)
+            .GroupBy(x => x.Format!)
+            .Select(g =>
+            {
+                var list = g.Select(x => x.Placement).ToList();
+                return new SummaryRowDto(
+                    Label: g.Key,
+                    BrandSlug: null,
+                    AudienceSlug: null,
+                    PlacementCount: list.Count,
+                    MediaCost: Costing(list).Sum(p => p.MediaCost),
+                    PlannedMediaCost: PlannedSum(list),
+                    CpdInvestmentCost: 0m,
+                    Metrics: WindowMetrics(list),
+                    TargetMetrics: Targets(list));
+            })
+            .OrderByDescending(r => r.MediaCost)
+            .ThenBy(r => r.Label)
+            .ToList();
+
+        var brands = placements
+            .Select(p => p.Brand)
+            .DistinctBy(b => b.Id)
+            .OrderBy(b => b.Name)
+            .Select(b => new BrandRefDto(b.Slug, b.Name, b.Color))
+            .ToList();
+
         var byAsset = placements
             .Select(p => new AssetRowDto(
                 Name: p.Name,
@@ -202,16 +283,23 @@ public class ClientSummaryService : IClientSummaryService
                 .Select(g => new
                 {
                     g.First().Brand,
-                    Months = (IReadOnlyList<DashboardMonthDto>)g
-                        .SelectMany(p => p.Actuals)
-                        .Where(InWindow)
-                        .GroupBy(a => (a.Year, a.Month))
+                    Months = (IReadOnlyList<BrandMonthlyPointDto>)g
+                        .SelectMany(p => p.Actuals.Where(InWindow)
+                            .Select(a => new { Actual = a, Category = CategoryOf(p.Template.Code) }))
+                        .GroupBy(x => (x.Actual.Year, x.Actual.Month))
                         .OrderBy(m => PeriodWindow.Ord(m.Key.Year, m.Key.Month))
                         .Select(m =>
                         {
-                            var d = new Dictionary<string, decimal>();
-                            foreach (var a in m) Add(d, a.MetricKey, a.Value);
-                            return new DashboardMonthDto(m.Key.Year, m.Key.Month, d);
+                            var all = new Dictionary<string, decimal>();
+                            var digital = new Dictionary<string, decimal>();
+                            var print = new Dictionary<string, decimal>();
+                            foreach (var x in m)
+                            {
+                                Add(all, x.Actual.MetricKey, x.Actual.Value);
+                                if (x.Category == "Digital") Add(digital, x.Actual.MetricKey, x.Actual.Value);
+                                else if (x.Category == "Print") Add(print, x.Actual.MetricKey, x.Actual.Value);
+                            }
+                            return new BrandMonthlyPointDto(m.Key.Year, m.Key.Month, all, digital, print);
                         })
                         .ToList(),
                 })
@@ -234,6 +322,9 @@ public class ClientSummaryService : IClientSummaryService
             Totals: totals,
             ByBrandAudience: byBrandAudience,
             ByPublisher: byPublisher,
+            ByCategory: byCategory,
+            ByDigitalFormat: byDigitalFormat,
+            Brands: brands,
             IsPlan: isPlan,
             Summary: summary,
             ShowBrandMonthlyChart: client.ShowBrandMonthlyChart,
@@ -241,4 +332,25 @@ public class ClientSummaryService : IClientSummaryService
             MonthlyByBrand: monthlyByBrand,
             ByAsset: byAsset);
     }
+
+    private static string CategoryOf(MetricTemplateCode code) => code switch
+    {
+        MetricTemplateCode.Print => "Print",
+        MetricTemplateCode.Education => "Education",
+        _ => "Digital",
+    };
+
+    private static string? DigitalFormatOf(MetricTemplateCode code, EdmSubcategory? edm) => code switch
+    {
+        MetricTemplateCode.DigitalDisplay => "Digital Display",
+        MetricTemplateCode.SponsoredContent => "Spon Con",
+        MetricTemplateCode.Edm => edm switch
+        {
+            EdmSubcategory.Solus => "eDM Solus",
+            EdmSubcategory.SponsoredContent => "eDM Spon Con",
+            EdmSubcategory.Banner => "eDM Banners",
+            _ => "eDM",
+        },
+        _ => null,
+    };
 }

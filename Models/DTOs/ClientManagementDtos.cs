@@ -39,3 +39,9 @@ public class AddClientUserRequest
     public string Email { get; set; } = "";
     public string? Name { get; set; }
 }
+
+/// <summary>DELETE manage/clients/{slug} body - the exact client name, typed to confirm.</summary>
+public class DeleteClientRequest
+{
+    public string ConfirmName { get; set; } = "";
+}

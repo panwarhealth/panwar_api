@@ -47,6 +47,8 @@ public class DashboardService : IDashboardService
             .ThenBy(p => p.Name)
             .ToListAsync(cancellationToken);
 
+        PlacementMetrics.EnsurePrintImpressions(placements);
+
         // Available span covers actuals AND live periods so planned future years are selectable.
         // Default window is the latest year with actuals; falls back to the latest planned year.
         var spanActuals = placements.SelectMany(p => p.Actuals).ToList();

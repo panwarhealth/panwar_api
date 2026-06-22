@@ -141,6 +141,47 @@ public class ManageClientsFunction
         return response;
     }
 
+    [Function("ManageDeleteClient")]
+    public async Task<HttpResponseData> DeleteClient(
+        [HttpTrigger(AuthorizationLevel.Anonymous, "delete", Route = "manage/clients/{clientSlug}")] HttpRequestData req,
+        FunctionContext context,
+        string clientSlug)
+    {
+        // Deleting a whole workbook is panwar-admin only - stricter than the editor manage gate.
+        if (!req.HasRole(context, "panwar-admin"))
+            return await req.CreateForbiddenResponseAsync();
+
+        var ct = context.CancellationToken;
+
+        var client = await _context.Clients
+            .IgnoreQueryFilters()
+            .FirstOrDefaultAsync(c => c.Slug == clientSlug, ct);
+        if (client is null)
+        {
+            var notFound = req.CreateResponse(HttpStatusCode.NotFound);
+            await notFound.WriteAsJsonAsync(new { error = "Client not found" });
+            return notFound;
+        }
+
+        var body = await new StreamReader(req.Body).ReadToEndAsync();
+        var data = JsonSerializer.Deserialize<DeleteClientRequest>(body, new JsonSerializerOptions
+        {
+            PropertyNameCaseInsensitive = true
+        });
+        if ((data?.ConfirmName ?? "").Trim() != client.Name)
+            return await BadRequest(req, "Type the workbook name exactly to confirm");
+
+        if (client.DeletedAt is null)
+        {
+            client.DeletedAt = DateTime.UtcNow;
+            client.UpdatedAt = DateTime.UtcNow;
+            await _context.SaveChangesAsync(ct);
+            _logger.LogInformation("Soft-deleted client {Slug} ({Id})", client.Slug, client.Id);
+        }
+
+        return req.CreateResponse(HttpStatusCode.NoContent);
+    }
+
     private static bool CanManageClients(HttpRequestData req, FunctionContext context)
         => req.HasRole(context, "panwar-admin") || req.HasRole(context, "dashboard-editor");
 

@@ -250,7 +250,7 @@ public class ManageInvitesFunction
         {
             var from = string.Format(CultureInfo.InvariantCulture, "{0:0000}-{1:00}", data.Year, data.StartMonth ?? 1);
             var to = string.Format(CultureInfo.InvariantCulture, "{0:0000}-{1:00}", data.Year, data.EndMonth ?? 12);
-            var summary = await _summaryService.GetSummaryAsync(clientId, from, to, ct);
+            var summary = await _summaryService.GetSummaryAsync(clientId, from, to, null, ct);
             if (summary is null) return "";
 
             if (mode == PreviewModes.Summary)

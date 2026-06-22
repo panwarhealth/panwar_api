@@ -13,11 +13,22 @@ public class EducationService : IEducationService
         _context = context;
     }
 
-    public async Task<EducationPagesResponse> GetPagesAsync(Guid clientId, CancellationToken cancellationToken)
+    public async Task<EducationPagesResponse> GetPagesAsync(
+        Guid clientId, string? from, string? to, CancellationToken cancellationToken)
     {
+        var hasFrom = PeriodWindow.TryParse(from, out var fromOrd);
+        var hasTo = PeriodWindow.TryParse(to, out var toOrd);
+        var windowed = hasFrom && hasTo;
+        if (windowed && toOrd < fromOrd) (fromOrd, toOrd) = (toOrd, fromOrd);
+
         var pages = await _context.EducationPages
             .AsNoTracking()
             .Where(p => p.ClientId == clientId)
+            .Where(p => !windowed
+                || p.Assets.SelectMany(a => a.Values)
+                    .Any(v => v.Year * 12 + v.Month - 1 >= fromOrd && v.Year * 12 + v.Month - 1 <= toOrd)
+                || p.Charts.SelectMany(c => c.Series).SelectMany(s => s.DataPoints)
+                    .Any(dp => dp.Year * 12 + dp.Month - 1 >= fromOrd && dp.Year * 12 + dp.Month - 1 <= toOrd))
             .OrderBy(p => p.SortOrder).ThenBy(p => p.Name)
             .Select(p => new EducationPageSummaryDto(
                 p.Id, p.Name, p.Slug, p.SortOrder,
@@ -26,7 +37,9 @@ public class EducationService : IEducationService
                 p.Assets.Count,
                 // "Completed"-status rows only — chart data points mirror these so we don't double-count.
                 p.Assets.SelectMany(a => a.Values)
-                    .Where(v => v.Status.ToLower().Contains("complet"))
+                    .Where(v => v.Status.ToLower().Contains("complet")
+                        && (!windowed
+                            || (v.Year * 12 + v.Month - 1 >= fromOrd && v.Year * 12 + v.Month - 1 <= toOrd)))
                     .Sum(v => (decimal?)v.Value) ?? 0))
             .ToListAsync(cancellationToken);
 
