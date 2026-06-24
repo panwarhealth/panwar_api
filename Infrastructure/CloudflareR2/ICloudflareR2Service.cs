@@ -9,6 +9,18 @@ public interface ICloudflareR2Service
     Task<(string uploadUrl, string objectKey)> GenerateUploadUrlAsync(string fileName, string contentType, CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// Generate a presigned PUT URL under a specific key prefix (e.g. "imports").
+    /// Returns the URL to PUT to and the canonical key to store.
+    /// </summary>
+    Task<(string uploadUrl, string objectKey)> GenerateUploadUrlAsync(string fileName, string contentType, string keyPrefix, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Download the raw bytes of an object. Used server-side to read and hash
+    /// uploaded import files for parsing.
+    /// </summary>
+    Task<byte[]> DownloadAsync(string objectKey, CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// Generate a presigned GET URL the browser can fetch the artwork from.
     /// Used by the client dashboard to display placement artwork. Short-lived
     /// (15 min) so leaked URLs expire quickly. The bucket has no public access

@@ -1,12 +1,8 @@
 using ClosedXML.Excel;
-using static Panwar.Tools.ImportPoc.Spreadsheet;
+using static Panwar.Api.Services.Import.Spreadsheet;
 
-namespace Panwar.Tools.ImportPoc;
+namespace Panwar.Api.Services.Import;
 
-// Princeton "Deskset" engagement: one sheet per month (JAN-DEC), daily rows,
-// columns = content pieces (Portal / Pain Leaflet / ...). Rolls daily -> monthly,
-// validates against the sheet's own "Total for <month>" row. A very different
-// shape to the block-structured templates - proves the multi-model design.
 public sealed class PrincetonAdapter : IWorkbookAdapter
 {
     public string FormatId => "princeton";
@@ -23,7 +19,6 @@ public sealed class PrincetonAdapter : IWorkbookAdapter
         if (names.Any(n => n.Contains("PLACEMENTS"))) return AdapterMatch.None;
         var monthSheets = names.Count(n => Months.ContainsKey(n));
         if (monthSheets < 6) return AdapterMatch.None;
-        // A Princeton month sheet carries the "Engagement Results by Day" marker.
         var marker = wb.Worksheets.Any(w => Months.ContainsKey(w.Name.Trim())
             && (ReadString(w.Cell(3, 3))?.Contains("Engagement", StringComparison.OrdinalIgnoreCase) ?? false));
         return marker ? AdapterMatch.Strong : AdapterMatch.Weak;
@@ -44,7 +39,6 @@ public sealed class PrincetonAdapter : IWorkbookAdapter
         int lastCol = ws.LastColumnUsed()?.ColumnNumber() ?? 0;
         if (lastRow == 0) return;
 
-        // Asset name: the cell beside the "Asset" label in col B.
         string? asset = null;
         int headerRow = 0;
         for (int r = 1; r <= Math.Min(lastRow, 8); r++)
@@ -60,7 +54,6 @@ public sealed class PrincetonAdapter : IWorkbookAdapter
         }
         if (headerRow == 0 || asset is null) return;
 
-        // Content-piece columns: D.. in the header row, until blank.
         var pieces = new List<(int Col, string Name)>();
         for (int c = 4; c <= lastCol; c++)
         {
@@ -70,9 +63,8 @@ public sealed class PrincetonAdapter : IWorkbookAdapter
         }
         if (pieces.Count == 0) return;
 
-        var brand = asset.Split(' ', 2)[0];   // "NFC Princeton Deskset" -> "NFC"
+        var brand = asset.Split(' ', 2)[0];
 
-        // Sum the daily rows per piece; stop at the "Total"/"YTD" footer or a non-date.
         var sums = pieces.ToDictionary(p => p.Col, _ => 0m);
         var declared = new Dictionary<int, decimal?>();
         for (int r = headerRow + 1; r <= lastRow; r++)
@@ -84,7 +76,7 @@ public sealed class PrincetonAdapter : IWorkbookAdapter
                     foreach (var (col, _) in pieces) declared[col] = ReadDecimal(ws.Cell(r, col));
                 continue;
             }
-            if (ReadDate(ws.Cell(r, 3)) is null) continue; // only true daily rows
+            if (ReadDate(ws.Cell(r, 3)) is null) continue;
             foreach (var (col, _) in pieces)
             {
                 var v = ReadDecimal(ws.Cell(r, col));

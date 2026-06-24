@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 using Panwar.Api.Data;
@@ -11,9 +12,11 @@ using Panwar.Api.Data;
 namespace Panwar.Api.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    partial class AppDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260623010543_AddImportRun")]
+    partial class AddImportRun
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -745,37 +748,6 @@ namespace Panwar.Api.Migrations
                     b.HasIndex("EducationChartId");
 
                     b.ToTable("education_series", "panwar_portals");
-                });
-
-            modelBuilder.Entity("Panwar.Api.Models.ImportAiCache", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
-
-                    b.Property<Guid>("ClientId")
-                        .HasColumnType("uuid");
-
-                    b.Property<string>("ContentHash")
-                        .IsRequired()
-                        .HasMaxLength(64)
-                        .HasColumnType("character varying(64)");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("timestamp with time zone")
-                        .HasDefaultValueSql("CURRENT_TIMESTAMP");
-
-                    b.Property<string>("SuggestionsJson")
-                        .IsRequired()
-                        .HasColumnType("jsonb");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("ClientId", "ContentHash")
-                        .IsUnique();
-
-                    b.ToTable("import_ai_cache", "panwar_portals");
                 });
 
             modelBuilder.Entity("Panwar.Api.Models.ImportRun", b =>

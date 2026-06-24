@@ -45,6 +45,8 @@ public class AppDbContext : DbContext
     public DbSet<AuditLog> AuditLogs { get; set; } = null!;
     public DbSet<ReportInvite> ReportInvites { get; set; } = null!;
     public DbSet<InviteEvent> InviteEvents { get; set; } = null!;
+    public DbSet<ImportRun> ImportRuns { get; set; } = null!;
+    public DbSet<ImportAiCache> ImportAiCaches { get; set; } = null!;
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -84,6 +86,8 @@ public class AppDbContext : DbContext
         ConfigureMagicLink(modelBuilder);
         ConfigureUserRole(modelBuilder);
         ConfigureAuditLog(modelBuilder);
+        ConfigureImportRun(modelBuilder);
+        ConfigureImportAiCache(modelBuilder);
     }
 
     private static void ConfigureClient(ModelBuilder modelBuilder)
@@ -605,6 +609,33 @@ public class AppDbContext : DbContext
             entity.Property(e => e.CreatedAt).HasDefaultValueSql("CURRENT_TIMESTAMP");
             entity.HasIndex(e => new { e.EntityType, e.EntityId });
             entity.HasIndex(e => e.UserId);
+        });
+    }
+
+    private static void ConfigureImportRun(ModelBuilder modelBuilder)
+    {
+        modelBuilder.Entity<ImportRun>(entity =>
+        {
+            entity.ToTable("import_run");
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.FileName).IsRequired().HasMaxLength(300);
+            entity.Property(e => e.ContentHash).IsRequired().HasMaxLength(64);
+            entity.Property(e => e.FormatId).IsRequired().HasMaxLength(50);
+            entity.Property(e => e.ImportedAt).HasDefaultValueSql("CURRENT_TIMESTAMP");
+            entity.HasIndex(e => new { e.ClientId, e.ContentHash });
+        });
+    }
+
+    private static void ConfigureImportAiCache(ModelBuilder modelBuilder)
+    {
+        modelBuilder.Entity<ImportAiCache>(entity =>
+        {
+            entity.ToTable("import_ai_cache");
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.ContentHash).IsRequired().HasMaxLength(64);
+            entity.Property(e => e.SuggestionsJson).IsRequired().HasColumnType("jsonb");
+            entity.Property(e => e.CreatedAt).HasDefaultValueSql("CURRENT_TIMESTAMP");
+            entity.HasIndex(e => new { e.ClientId, e.ContentHash }).IsUnique();
         });
     }
 }

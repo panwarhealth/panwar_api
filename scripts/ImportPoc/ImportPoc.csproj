@@ -5,12 +5,30 @@
     <TargetFramework>net9.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
-    <!-- PoC for the media-results import parser; not part of the API build. -->
+    <!-- Validation harness for the media-results parser. Compiles the REAL API
+         parser sources (Services/Import) so there is one source of truth; not
+         part of the API build. -->
     <RootNamespace>Panwar.Tools.ImportPoc</RootNamespace>
   </PropertyGroup>
 
   <ItemGroup>
     <PackageReference Include="ClosedXML" Version="0.104.2" />
+    <PackageReference Include="ExcelDataReader" Version="3.7.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Compile Include="..\..\Services\Import\WorkbookLoader.cs" />
+    <Compile Include="..\..\Services\Import\SolusEdmAdapter.cs" />
+    <Compile Include="..\..\Services\Import\Ir.cs" />
+    <Compile Include="..\..\Services\Import\ImportParser.cs" />
+    <Compile Include="..\..\Services\Import\Catalog.cs" />
+    <Compile Include="..\..\Services\Import\Spreadsheet.cs" />
+    <Compile Include="..\..\Services\Import\PlacementBlocks.cs" />
+    <Compile Include="..\..\Services\Import\ResultsTemplateAdapter.cs" />
+    <Compile Include="..\..\Services\Import\PrincetonAdapter.cs" />
+    <Compile Include="..\..\Services\Import\PharmacyClubAdapter.cs" />
+    <Compile Include="..\..\Services\Import\ResearchReviewAdapter.cs" />
+    <Compile Include="..\..\Services\Import\ReckittReportAdapter.cs" />
   </ItemGroup>
 
 </Project>

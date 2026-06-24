@@ -1,11 +1,7 @@
-using System.Text;
-using System.Text.RegularExpressions;
 using ClosedXML.Excel;
 
-namespace Panwar.Tools.ImportPoc;
+namespace Panwar.Api.Services.Import;
 
-// Format-agnostic spreadsheet primitives, lifted/generalised from the recovered
-// Reckitt seeder. Reused by every adapter.
 internal static class Spreadsheet
 {
     public static string? ReadString(IXLCell cell)
@@ -47,12 +43,9 @@ internal static class Spreadsheet
     private static readonly string[] MetricMarkers =
         { "send", "open", "click", "view", "impression", "session", "reach", "completion", "enrol" };
 
-    // A placement block header has a brand in col C and a metric label in col D
-    // (numeric summary/month rows never do).
     public static bool LooksLikeMetricLabel(string? s)
         => s is not null && MetricMarkers.Any(m => s.Contains(m, StringComparison.OrdinalIgnoreCase));
 
-    // Map a placement name to the canonical publisher slug (ported from the seeder).
     public static string? ResolvePublisher(string name)
     {
         var u = name.ToUpperInvariant();
@@ -63,8 +56,9 @@ internal static class Spreadsheet
         if (u.StartsWith("AJGP") || u.StartsWith("RACGP")) return "ajgp";
         if (u.StartsWith("ADG")) return "adg";
         if (u.StartsWith("PRINCETON")) return "princeton";
+        if (u.StartsWith("RESEARCH REVIEW")) return "research-review";
         if (u.StartsWith("NEWSGP")) return "newsgp";
-        if (u.StartsWith("MT ") || u.StartsWith("MEDICAL TODAY")) return "medical-today";
+        if (u.StartsWith("MT ") || u.StartsWith("MEDICAL TODAY") || u.StartsWith("MEDICINE TODAY")) return "medicine-today";
         if (u.StartsWith("PRAXHUB")) return "praxhub";
         return null;
     }

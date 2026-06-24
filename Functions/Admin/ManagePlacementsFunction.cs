@@ -11,6 +11,7 @@ using Panwar.Api.Models;
 using Panwar.Api.Models.DTOs;
 using Panwar.Api.Models.Enums;
 using Panwar.Api.Services;
+using Panwar.Api.Services.Write;
 using Panwar.Api.Shared.Extensions;
 
 namespace Panwar.Api.Functions.Admin;
@@ -27,15 +28,18 @@ public class ManagePlacementsFunction
     private readonly ILogger<ManagePlacementsFunction> _logger;
     private readonly AppDbContext _context;
     private readonly ICloudflareR2Service _r2;
+    private readonly IPlacementWriteService _placementWrite;
 
     public ManagePlacementsFunction(
         ILogger<ManagePlacementsFunction> logger,
         AppDbContext context,
-        ICloudflareR2Service r2)
+        ICloudflareR2Service r2,
+        IPlacementWriteService placementWrite)
     {
         _logger = logger;
         _context = context;
         _r2 = r2;
+        _placementWrite = placementWrite;
     }
 
     [Function("ManageListPlacements")]
@@ -414,32 +418,8 @@ public class ManagePlacementsFunction
             }
         }
 
-        foreach (var row in data.Actuals)
-        {
-            var key = row.MetricKey.Trim().ToLowerInvariant();
-            var existing = placement.Actuals.FirstOrDefault(a =>
-                a.Year == row.Year && a.Month == row.Month &&
-                string.Equals(a.MetricKey, key, StringComparison.OrdinalIgnoreCase));
-
-            if (existing is null)
-            {
-                _context.PlacementActuals.Add(new PlacementActual
-                {
-                    Id = Guid.NewGuid(),
-                    PlacementId = placement.Id,
-                    Year = row.Year,
-                    Month = row.Month,
-                    MetricKey = key,
-                    Value = row.Value,
-                    Note = Clean(row.Note),
-                });
-            }
-            else
-            {
-                existing.Value = row.Value;
-                existing.Note = Clean(row.Note);
-            }
-        }
+        _placementWrite.UpsertActuals(placement,
+            data.Actuals.Select(row => new ActualWrite(row.Year, row.Month, row.MetricKey, row.Value, row.Note)));
         await _context.SaveChangesAsync(ct);
 
         var dto = await LoadDetail(placement.Id, client.Id, ct);

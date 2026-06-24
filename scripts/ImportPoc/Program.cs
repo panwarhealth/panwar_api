@@ -1,37 +1,50 @@
-using System.Text.Json;
-using ClosedXML.Excel;
-using Panwar.Tools.ImportPoc;
+using Panwar.Api.Services.Import;
 
-// PoC: parse a real publisher file into the canonical IR and print it as JSON.
-// Usage: dotnet run -- "<path-to-xlsx>" [clientSlug] [year]
+// Validation harness: parse one workbook (or every .xlsx/.xls in a folder) and
+// print a reconciliation summary. Usage: dotnet run -- "<path>" [year]
+var path = args.Length > 0 ? args[0] : ".";
+var year = args.Length > 1 && int.TryParse(args[1], out var y) ? y : 2026;
 
-var path = args.Length > 0
-    ? args[0]
-    : @"C:\Users\User\Downloads\RESULTS\RESULTS\5. MAY\Reckitt AJP Results Template-May 2026.xlsx";
-var clientSlug = args.Length > 1 ? args[1] : "reckitt";
-var year = args.Length > 2 && int.TryParse(args[2], out var y) ? y : 2026;
+var files = Directory.Exists(path)
+    ? Directory.GetFiles(path, "*.xls*", SearchOption.AllDirectories).OrderBy(f => f).ToArray()
+    : new[] { path };
 
-if (!File.Exists(path))
+foreach (var file in files)
 {
-    Console.Error.WriteLine($"File not found: {path}");
-    return 1;
+    if (Path.GetFileName(file).StartsWith("~$")) continue;
+    Console.WriteLine($"\n================ {Path.GetFileName(file)} ================");
+    var parser = ImportParser.Default();
+    var doc = new ImportDocument { ClientSlug = "test", Year = year };
+    try
+    {
+        using var wb = WorkbookLoader.Load(File.ReadAllBytes(file));
+        parser.ParseInto(wb, new ParseContext { ClientSlug = "test", Year = year, FileName = Path.GetFileName(file) }, doc);
+    }
+    catch (Exception ex)
+    {
+        Console.WriteLine($"  ERROR opening/parsing: {ex.Message}");
+        continue;
+    }
+
+    foreach (var s in doc.Sources)
+        Console.WriteLine($"  format={s.FormatId} match={s.Match}");
+
+    Console.WriteLine($"  placements={doc.Placements.Count}  educationAssets={doc.Education.Count}  warnings={doc.Warnings.Count}");
+
+    foreach (var p in doc.Placements)
+    {
+        var byMetric = p.Actuals.GroupBy(a => a.Metric)
+            .Select(g => $"{g.Key}={g.Sum(a => a.Value):0.##}");
+        Console.WriteLine($"    P: [{p.Publisher}/{p.Audience}/{p.Template}] {p.Name}  -> {string.Join(", ", byMetric)}");
+        foreach (var mn in p.MonthNotes.OrderBy(x => x.Key))
+            Console.WriteLine($"        month {mn.Key}: {mn.Value}");
+    }
+    foreach (var e in doc.Education)
+    {
+        var byStatus = e.Values.GroupBy(v => v.Status)
+            .Select(g => $"{g.Key}={g.Sum(v => v.Value):0.##} ({g.Count()}mo)");
+        Console.WriteLine($"    E: [{e.Brand}] {e.Title}  -> {string.Join(", ", byStatus)}");
+    }
+    foreach (var w in doc.Warnings)
+        Console.WriteLine($"    ! {w.Message}");
 }
-
-var parser = ImportParser.Default();
-using var wb = new XLWorkbook(path);
-var ctx = new ParseContext { ClientSlug = clientSlug, Year = year, FileName = Path.GetFileName(path) };
-var doc = parser.ParseFile(wb, ctx);
-
-var json = JsonSerializer.Serialize(doc, new JsonSerializerOptions
-{
-    WriteIndented = true,
-    DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull,
-});
-Console.WriteLine(json);
-
-Console.Error.WriteLine(
-    $"\n== summary ==\nadapter: {doc.Sources.FirstOrDefault()?.FormatId} ({doc.Sources.FirstOrDefault()?.Match})" +
-    $"\nplacements: {doc.Placements.Count}  (actual rows: {doc.Placements.Sum(p => p.Actuals.Count)})" +
-    $"\neducation assets: {doc.Education.Count}  (value rows: {doc.Education.Sum(e => e.Values.Count)})" +
-    $"\nwarnings: {doc.Warnings.Count}");
-return 0;

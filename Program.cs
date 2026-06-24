@@ -9,7 +9,10 @@ using Npgsql;
 using Panwar.Api.Data;
 using Panwar.Api.Infrastructure.CloudflareR2;
 using Panwar.Api.Services;
+using Panwar.Api.Services.Ai;
 using Panwar.Api.Services.Authorization;
+using Panwar.Api.Services.Import;
+using Panwar.Api.Services.Write;
 using Panwar.Api.Shared.Middleware;
 
 var host = new HostBuilder()
@@ -74,6 +77,12 @@ var host = new HostBuilder()
         services.AddScoped<IDashboardService, DashboardService>();
         services.AddScoped<IClientSummaryService, ClientSummaryService>();
         services.AddScoped<IEducationService, EducationService>();
+
+        services.AddScoped<IPlacementWriteService, PlacementWriteService>();
+        services.AddScoped<IEducationWriteService, EducationWriteService>();
+        services.AddScoped<IAnthropicService, AnthropicService>();
+        services.AddScoped<IImportReconciliationService, ImportReconciliationService>();
+        services.AddScoped<IImportService, ImportService>();
 
         // Multiple IDashboardAccessPolicy registrations are composed by the resolver.
         services.AddScoped<IDashboardAccessPolicy, EmployeeAccessPolicy>();

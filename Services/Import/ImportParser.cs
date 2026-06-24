@@ -1,6 +1,6 @@
 using ClosedXML.Excel;
 
-namespace Panwar.Tools.ImportPoc;
+namespace Panwar.Api.Services.Import;
 
 public enum AdapterMatch { None, Weak, Strong }
 
@@ -11,7 +11,6 @@ public sealed class ParseContext
     public string FileName { get; init; } = "";
 }
 
-// One adapter per format "model". Pure - reads a workbook, emits the canonical IR, never writes a DB.
 public interface IWorkbookAdapter
 {
     string FormatId { get; }
@@ -19,7 +18,6 @@ public interface IWorkbookAdapter
     void Parse(IXLWorkbook wb, ParseContext ctx, ImportDocument doc);
 }
 
-// Dispatcher: detect the strongest-matching adapter for each file, route, merge.
 public sealed class ImportParser
 {
     private readonly IReadOnlyList<IWorkbookAdapter> _adapters;
@@ -30,6 +28,10 @@ public sealed class ImportParser
     {
         new ResultsTemplateAdapter(),
         new PrincetonAdapter(),
+        new PharmacyClubAdapter(),
+        new ResearchReviewAdapter(),
+        new SolusEdmAdapter(),
+        new ReckittReportAdapter(),
     });
 
     public ImportDocument ParseFile(IXLWorkbook wb, ParseContext ctx)
@@ -58,5 +60,33 @@ public sealed class ImportParser
 
         doc.Sources.Add(new SourceInfo { File = ctx.FileName, FormatId = best.FormatId, Match = bestMatch.ToString() });
         best.Parse(wb, ctx, doc);
+        SnapshotTabs(wb, ctx, doc);
+    }
+
+    // Bounded text snapshot of each sheet so the AI can read a tab a note refers
+    // to. Capped to keep the prompt small; the Lookup helper sheet is skipped.
+    private static void SnapshotTabs(IXLWorkbook wb, ParseContext ctx, ImportDocument doc)
+    {
+        const int maxRows = 60, maxCols = 16;
+        foreach (var ws in wb.Worksheets)
+        {
+            if (ws.Name.Trim().Equals("Lookup", StringComparison.OrdinalIgnoreCase)) continue;
+            int lastRow = Math.Min(ws.LastRowUsed()?.RowNumber() ?? 0, maxRows);
+            int lastCol = Math.Min(ws.LastColumnUsed()?.ColumnNumber() ?? 0, maxCols);
+            if (lastRow == 0 || lastCol == 0) continue;
+
+            var sb = new System.Text.StringBuilder();
+            for (int r = 1; r <= lastRow; r++)
+            {
+                var cells = new List<string>();
+                for (int c = 1; c <= lastCol; c++)
+                {
+                    var s = Spreadsheet.ReadString(ws.Cell(r, c));
+                    if (s is not null) cells.Add($"{(char)('A' + c - 1)}={s}");
+                }
+                if (cells.Count > 0) sb.Append('r').Append(r).Append(": ").AppendLine(string.Join(" | ", cells));
+            }
+            doc.RawTabs.Add(new RawTab { File = ctx.FileName, Sheet = ws.Name.Trim(), Text = sb.ToString() });
+        }
     }
 }

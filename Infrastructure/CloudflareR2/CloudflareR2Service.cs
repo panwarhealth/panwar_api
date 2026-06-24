@@ -43,9 +43,12 @@ public class CloudflareR2Service : ICloudflareR2Service
     }
 
     public Task<(string uploadUrl, string objectKey)> GenerateUploadUrlAsync(string fileName, string contentType, CancellationToken cancellationToken = default)
+        => GenerateUploadUrlAsync(fileName, contentType, "placements", cancellationToken);
+
+    public Task<(string uploadUrl, string objectKey)> GenerateUploadUrlAsync(string fileName, string contentType, string keyPrefix, CancellationToken cancellationToken = default)
     {
         var sanitized = SanitizeFileName(fileName);
-        var key = $"placements/{Guid.NewGuid()}_{sanitized}";
+        var key = $"{keyPrefix.Trim('/')}/{Guid.NewGuid()}_{sanitized}";
 
         var request = new GetPreSignedUrlRequest
         {
@@ -58,6 +61,18 @@ public class CloudflareR2Service : ICloudflareR2Service
 
         var uploadUrl = _s3Client.GetPreSignedURL(request);
         return Task.FromResult((uploadUrl, key));
+    }
+
+    public async Task<byte[]> DownloadAsync(string objectKey, CancellationToken cancellationToken = default)
+    {
+        using var response = await _s3Client.GetObjectAsync(new GetObjectRequest
+        {
+            BucketName = _bucket,
+            Key = objectKey
+        }, cancellationToken);
+        using var ms = new MemoryStream();
+        await response.ResponseStream.CopyToAsync(ms, cancellationToken);
+        return ms.ToArray();
     }
 
     public Task<string> GenerateDownloadUrlAsync(string objectKey, CancellationToken cancellationToken = default)
