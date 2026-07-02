@@ -87,7 +87,7 @@ public class ManagePlacementsFunction
                 p.TemplateId, TemplateCode = p.Template.Code,
                 p.Year, p.Name, p.Objective,
                 p.OsCode, p.ArtworkUrl,
-                p.LiveMonths, p.StartDate, p.EndDate,
+                p.LiveMonths, p.StartDate, p.EndDate, p.SendDates,
                 p.EdmSubcategory, p.EducationSubcategory, p.GroupId,
                 p.MediaCost, p.PlannedMediaCost,
                 p.IsBonus,
@@ -108,6 +108,7 @@ public class ManagePlacementsFunction
             r.LiveMonths,
             r.StartDate?.ToString("yyyy-MM-dd"),
             r.EndDate?.ToString("yyyy-MM-dd"),
+            r.SendDates.Select(d => d.ToString("yyyy-MM-dd")).ToList(),
             r.EdmSubcategory.HasValue ? PlacementEnumNames.ToName(r.EdmSubcategory.Value) : null,
             r.EducationSubcategory.HasValue ? PlacementEnumNames.ToName(r.EducationSubcategory.Value) : null,
             r.GroupId,
@@ -196,6 +197,7 @@ public class ManagePlacementsFunction
             LiveMonths = result.LiveMonths,
             StartDate = result.StartDate,
             EndDate = result.EndDate,
+            SendDates = result.SendDates,
             EdmSubcategory = result.EdmSubcategory,
             EducationSubcategory = result.EducationSubcategory,
             MediaCost = data.MediaCost,
@@ -274,6 +276,7 @@ public class ManagePlacementsFunction
         placement.LiveMonths = result.LiveMonths;
         placement.StartDate = result.StartDate;
         placement.EndDate = result.EndDate;
+        placement.SendDates = result.SendDates;
         placement.EdmSubcategory = result.EdmSubcategory;
         placement.EducationSubcategory = result.EducationSubcategory;
         placement.MediaCost = data.MediaCost;
@@ -667,6 +670,7 @@ public class ManagePlacementsFunction
         int[] LiveMonths,
         DateOnly? StartDate,
         DateOnly? EndDate,
+        DateOnly[] SendDates,
         EdmSubcategory? EdmSubcategory,
         EducationSubcategory? EducationSubcategory);
 
@@ -715,6 +719,16 @@ public class ManagePlacementsFunction
             if (!courseOk) return ("Unknown target course for this client", null);
         }
 
+        // Send dates arrive as ISO strings from the card's date pickers; strict-parse,
+        // dedupe, sort. Education ignores them (it has a range, not sends).
+        var sendDates = (data.SendDates ?? new List<string>())
+            .Select(s => DateOnly.TryParseExact(s.Trim(), "yyyy-MM-dd", out var sd) ? sd : (DateOnly?)null)
+            .Where(d => d is not null)
+            .Select(d => d!.Value)
+            .Distinct()
+            .OrderBy(d => d)
+            .ToArray();
+
         // Per-template date + sub-category rules. Fields that don't apply to the
         // template are normalised away rather than rejected.
         DateOnly? startDate = null, endDate = null;
@@ -725,7 +739,9 @@ public class ManagePlacementsFunction
             case MetricTemplateCode.Edm:
                 if (!PlacementEnumNames.TryParseEdm(data.EdmSubcategory, out var e))
                     return ("Select an eDM type: solus, sponsored content or banner", null);
-                startDate = data.StartDate;
+                // The send-date list is the source of truth; StartDate stays the
+                // earliest send (legacy single-date requests still work).
+                startDate = sendDates.Length > 0 ? sendDates[0] : data.StartDate;
                 edmSub = e;
                 liveMonths = Array.Empty<int>();
                 break;
@@ -741,10 +757,17 @@ public class ManagePlacementsFunction
                 endDate = data.EndDate;
                 eduSub = ed;
                 liveMonths = Array.Empty<int>();
+                sendDates = Array.Empty<DateOnly>();
+                break;
+
+            default:
+                // Display/print/sponsored buys keep LiveMonths; dated sends (the "eDM
+                // banner" style buys) may carry send dates too, earliest = StartDate.
+                if (sendDates.Length > 0) startDate = sendDates[0];
                 break;
         }
 
-        return (null, new ValidatedPlacement(objective, liveMonths, startDate, endDate, edmSub, eduSub));
+        return (null, new ValidatedPlacement(objective, liveMonths, startDate, endDate, sendDates, edmSub, eduSub));
     }
 
     /// <summary>The stored (non-calculated) metric keys valid for a template.</summary>
@@ -791,6 +814,7 @@ public class ManagePlacementsFunction
             p.LiveMonths,
             p.StartDate?.ToString("yyyy-MM-dd"),
             p.EndDate?.ToString("yyyy-MM-dd"),
+            p.SendDates.Select(d => d.ToString("yyyy-MM-dd")).ToList(),
             p.EdmSubcategory.HasValue ? PlacementEnumNames.ToName(p.EdmSubcategory.Value) : null,
             p.EducationSubcategory.HasValue ? PlacementEnumNames.ToName(p.EducationSubcategory.Value) : null,
             p.GroupId,

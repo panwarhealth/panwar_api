@@ -47,6 +47,8 @@ public class AppDbContext : DbContext
     public DbSet<InviteEvent> InviteEvents { get; set; } = null!;
     public DbSet<ImportRun> ImportRuns { get; set; } = null!;
     public DbSet<ImportAiCache> ImportAiCaches { get; set; } = null!;
+    public DbSet<ImportAiLog> ImportAiLogs { get; set; } = null!;
+    public DbSet<ImportNameAlias> ImportNameAliases { get; set; } = null!;
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -88,6 +90,8 @@ public class AppDbContext : DbContext
         ConfigureAuditLog(modelBuilder);
         ConfigureImportRun(modelBuilder);
         ConfigureImportAiCache(modelBuilder);
+        ConfigureImportAiLog(modelBuilder);
+        ConfigureImportNameAlias(modelBuilder);
     }
 
     private static void ConfigureClient(ModelBuilder modelBuilder)
@@ -241,6 +245,7 @@ public class AppDbContext : DbContext
             entity.Property(e => e.PlannedMediaCost).HasColumnType("numeric(12,2)");
             entity.Property(e => e.Circulation).HasColumnType("numeric(12,2)");
             entity.Property(e => e.LiveMonths).HasColumnType("integer[]");
+            entity.Property(e => e.SendDates).HasColumnType("date[]");
             entity.Property(e => e.Year);
             entity.Property(e => e.CreatedAt).HasDefaultValueSql("CURRENT_TIMESTAMP");
             entity.Property(e => e.UpdatedAt).HasDefaultValueSql("CURRENT_TIMESTAMP");
@@ -626,6 +631,20 @@ public class AppDbContext : DbContext
         });
     }
 
+    private static void ConfigureImportNameAlias(ModelBuilder modelBuilder)
+    {
+        modelBuilder.Entity<ImportNameAlias>(entity =>
+        {
+            entity.ToTable("import_name_alias");
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.SourceName).IsRequired().HasMaxLength(500);
+            entity.Property(e => e.CreatedAt).HasDefaultValueSql("CURRENT_TIMESTAMP");
+            entity.HasOne<Client>().WithMany().HasForeignKey(e => e.ClientId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne<Placement>().WithMany().HasForeignKey(e => e.PlacementId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasIndex(e => new { e.ClientId, e.SourceName }).IsUnique();
+        });
+    }
+
     private static void ConfigureImportAiCache(ModelBuilder modelBuilder)
     {
         modelBuilder.Entity<ImportAiCache>(entity =>
@@ -636,6 +655,27 @@ public class AppDbContext : DbContext
             entity.Property(e => e.SuggestionsJson).IsRequired().HasColumnType("jsonb");
             entity.Property(e => e.CreatedAt).HasDefaultValueSql("CURRENT_TIMESTAMP");
             entity.HasIndex(e => new { e.ClientId, e.ContentHash }).IsUnique();
+        });
+    }
+
+    private static void ConfigureImportAiLog(ModelBuilder modelBuilder)
+    {
+        modelBuilder.Entity<ImportAiLog>(entity =>
+        {
+            entity.ToTable("import_ai_log");
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.FileName).IsRequired().HasMaxLength(300);
+            entity.Property(e => e.ContentHash).IsRequired().HasMaxLength(64);
+            entity.Property(e => e.Model).IsRequired().HasMaxLength(100);
+            entity.Property(e => e.SystemPrompt).IsRequired();
+            entity.Property(e => e.TranscriptJson).IsRequired().HasColumnType("jsonb");
+            entity.Property(e => e.AnswerJson).HasColumnType("jsonb");
+            entity.Property(e => e.VerificationJson).IsRequired().HasColumnType("jsonb");
+            entity.Property(e => e.CellsReadJson).IsRequired().HasColumnType("jsonb");
+            entity.Property(e => e.GroundingJson).IsRequired().HasColumnType("jsonb");
+            entity.Property(e => e.OutcomeJson).HasColumnType("jsonb");
+            entity.Property(e => e.CreatedAt).HasDefaultValueSql("CURRENT_TIMESTAMP");
+            entity.HasIndex(e => new { e.ClientId, e.ContentHash });
         });
     }
 }

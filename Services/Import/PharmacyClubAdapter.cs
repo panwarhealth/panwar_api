@@ -63,11 +63,12 @@ public sealed class PharmacyClubAdapter : IWorkbookAdapter
             var asset = new ParsedEducationAsset
             {
                 Source = ctx.FileName,
+                Group = "Pharmacy Club",
                 Brand = brand,
                 Type = null,
                 Title = title,
                 Author = null,
-                Expiry = ReadString(ws.Cell(r, 4)),
+                Expiry = ReadDateIso(ws.Cell(r, 4)),
             };
 
             var st = status ?? "Completions";

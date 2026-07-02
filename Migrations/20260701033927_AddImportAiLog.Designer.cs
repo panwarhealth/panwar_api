@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 using Panwar.Api.Data;
@@ -11,9 +12,11 @@ using Panwar.Api.Data;
 namespace Panwar.Api.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    partial class AppDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260701033927_AddImportAiLog")]
+    partial class AddImportAiLog
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -855,41 +858,6 @@ namespace Panwar.Api.Migrations
                     b.ToTable("import_ai_log", "panwar_portals");
                 });
 
-            modelBuilder.Entity("Panwar.Api.Models.ImportNameAlias", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
-
-                    b.Property<Guid>("ClientId")
-                        .HasColumnType("uuid");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("timestamp with time zone")
-                        .HasDefaultValueSql("CURRENT_TIMESTAMP");
-
-                    b.Property<Guid?>("CreatedByUserId")
-                        .HasColumnType("uuid");
-
-                    b.Property<Guid>("PlacementId")
-                        .HasColumnType("uuid");
-
-                    b.Property<string>("SourceName")
-                        .IsRequired()
-                        .HasMaxLength(500)
-                        .HasColumnType("character varying(500)");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("PlacementId");
-
-                    b.HasIndex("ClientId", "SourceName")
-                        .IsUnique();
-
-                    b.ToTable("import_name_alias", "panwar_portals");
-                });
-
             modelBuilder.Entity("Panwar.Api.Models.ImportRun", b =>
                 {
                     b.Property<Guid>("Id")
@@ -1208,10 +1176,6 @@ namespace Panwar.Api.Migrations
 
                     b.Property<Guid>("PublisherId")
                         .HasColumnType("uuid");
-
-                    b.PrimitiveCollection<DateOnly[]>("SendDates")
-                        .IsRequired()
-                        .HasColumnType("date[]");
 
                     b.Property<DateOnly?>("StartDate")
                         .HasColumnType("date");
@@ -1846,21 +1810,6 @@ namespace Panwar.Api.Migrations
                         .IsRequired();
 
                     b.Navigation("Chart");
-                });
-
-            modelBuilder.Entity("Panwar.Api.Models.ImportNameAlias", b =>
-                {
-                    b.HasOne("Panwar.Api.Models.Client", null)
-                        .WithMany()
-                        .HasForeignKey("ClientId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.HasOne("Panwar.Api.Models.Placement", null)
-                        .WithMany()
-                        .HasForeignKey("PlacementId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
                 });
 
             modelBuilder.Entity("Panwar.Api.Models.InviteEvent", b =>

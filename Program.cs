@@ -80,6 +80,7 @@ var host = new HostBuilder()
 
         services.AddScoped<IPlacementWriteService, PlacementWriteService>();
         services.AddScoped<IEducationWriteService, EducationWriteService>();
+        services.AddSingleton<IImportProgress, ImportProgress>();
         services.AddScoped<IAnthropicService, AnthropicService>();
         services.AddScoped<IImportReconciliationService, ImportReconciliationService>();
         services.AddScoped<IImportService, ImportService>();

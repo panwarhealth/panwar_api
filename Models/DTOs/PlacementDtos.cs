@@ -18,6 +18,7 @@ public sealed record PlacementListItemDto(
     int[] LiveMonths,
     string? StartDate,
     string? EndDate,
+    IReadOnlyList<string> SendDates,
     string? EdmSubcategory,
     string? EducationSubcategory,
     Guid? GroupId,
@@ -47,6 +48,7 @@ public sealed record PlacementDetailDto(
     int[] LiveMonths,
     string? StartDate,
     string? EndDate,
+    IReadOnlyList<string> SendDates,
     string? EdmSubcategory,
     string? EducationSubcategory,
     Guid? GroupId,
@@ -80,6 +82,7 @@ public class PlacementWriteRequest
     public int[] LiveMonths { get; set; } = Array.Empty<int>();
     public DateOnly? StartDate { get; set; }            // eDM send date / education range start
     public DateOnly? EndDate { get; set; }              // education range end
+    public List<string> SendDates { get; set; } = new(); // send dates, ISO yyyy-MM-dd (eDM + display buys with dated sends)
     public string? EdmSubcategory { get; set; }         // solus | sponsored_content | banner
     public string? EducationSubcategory { get; set; }   // module | article | podcast_webinar | clinical_audit | research_paper | quiz
     public decimal MediaCost { get; set; }

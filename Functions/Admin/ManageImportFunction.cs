@@ -3,6 +3,8 @@ using System.Text.Json;
 using Microsoft.Azure.Functions.Worker;
 using Microsoft.Azure.Functions.Worker.Http;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using Panwar.Api.Data;
 using Panwar.Api.Infrastructure.CloudflareR2;
 using Panwar.Api.Models.DTOs;
@@ -24,12 +26,24 @@ public class ManageImportFunction
     private readonly AppDbContext _context;
     private readonly ICloudflareR2Service _r2;
     private readonly IImportService _import;
+    private readonly IImportProgress _progress;
+    private readonly IServiceScopeFactory _scopeFactory;
+    private readonly ILogger<ManageImportFunction> _logger;
 
-    public ManageImportFunction(AppDbContext context, ICloudflareR2Service r2, IImportService import)
+    public ManageImportFunction(
+        AppDbContext context,
+        ICloudflareR2Service r2,
+        IImportService import,
+        IImportProgress progress,
+        IServiceScopeFactory scopeFactory,
+        ILogger<ManageImportFunction> logger)
     {
         _context = context;
         _r2 = r2;
         _import = import;
+        _progress = progress;
+        _scopeFactory = scopeFactory;
+        _logger = logger;
     }
 
     [Function("ManageImportUploadUrl")]
@@ -69,17 +83,52 @@ public class ManageImportFunction
         var data = await ReadJson<ImportPreviewRequest>(req);
         if (data is null || data.Files is null || data.Files.Count == 0) return await BadRequest(req, "At least one file is required");
 
+        // The build can run for minutes (the AI reads note-heavy files), which is longer
+        // than any HTTP request may stay open (Azure hard-caps around 230s). So it runs
+        // as a background job; the frontend polls the progress endpoint for status + result.
+        var jobId = data.JobId ?? Guid.NewGuid();
+        var request = data with { JobId = jobId };
+        var userId = req.GetUserId(context);
+        _progress.Report(jobId, "Getting started...");
+        _ = Task.Run(() => RunPreviewJobAsync(clientSlug, request, userId, jobId));
+
+        var resp = req.CreateResponse(HttpStatusCode.Accepted);
+        await resp.WriteAsJsonAsync(new { jobId });
+        return resp;
+    }
+
+    // Runs outside the request: its own DI scope (the request's is disposed once the
+    // 202 goes back) and no request cancellation token.
+    private async Task RunPreviewJobAsync(string clientSlug, ImportPreviewRequest request, Guid? userId, Guid jobId)
+    {
         try
         {
-            var preview = await _import.BuildPreviewAsync(clientSlug, data, ct);
-            var resp = req.CreateResponse(HttpStatusCode.OK);
-            await resp.WriteAsJsonAsync(preview);
-            return resp;
+            using var scope = _scopeFactory.CreateScope();
+            var import = scope.ServiceProvider.GetRequiredService<IImportService>();
+            var preview = await import.BuildPreviewAsync(clientSlug, request, userId, CancellationToken.None);
+            _progress.Complete(jobId, preview);
         }
-        catch (ImportConflictException ex)
+        catch (Exception ex)
         {
-            return await BadRequest(req, ex.Message);
+            _logger.LogError(ex, "Import preview job {JobId} failed", jobId);
+            _progress.Fail(jobId, ex is ImportConflictException ? ex.Message : "Something went wrong building the preview - try again.");
         }
+    }
+
+    // Polled by the frontend while the preview job runs: live status while running,
+    // then the finished preview (or the error).
+    [Function("ManageImportProgress")]
+    public async Task<HttpResponseData> Progress(
+        [HttpTrigger(AuthorizationLevel.Anonymous, "get", Route = "manage/clients/{clientSlug}/import/progress/{jobId:guid}")] HttpRequestData req,
+        FunctionContext context,
+        string clientSlug,
+        Guid jobId)
+    {
+        if (!CanManage(req, context)) return await req.CreateForbiddenResponseAsync();
+
+        var resp = req.CreateResponse(HttpStatusCode.OK);
+        await resp.WriteAsJsonAsync(_progress.Get(jobId) ?? new ImportJobState("unknown", null, null, null));
+        return resp;
     }
 
     [Function("ManageImportCommit")]

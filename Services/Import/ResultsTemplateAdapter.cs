@@ -72,11 +72,12 @@ public sealed class ResultsTemplateAdapter : IWorkbookAdapter
                 current = new ParsedEducationAsset
                 {
                     Source = ctx.FileName,
+                    Group = ReadString(ws.Cell(headerRow, 4)),
                     Brand = brand,
                     Type = ReadString(ws.Cell(r, 3)),
                     Title = title,
                     Author = ReadString(ws.Cell(r, 5)),
-                    Expiry = ReadString(ws.Cell(r, 6)),
+                    Expiry = ReadDateIso(ws.Cell(r, 6)),
                 };
                 doc.Education.Add(current);
             }

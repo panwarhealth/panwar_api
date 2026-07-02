@@ -179,13 +179,17 @@ public class DashboardService : IDashboardService
                 _ => null,
             };
 
-            var sendDates = members.Count > 1
-                ? members
-                    .Where(m => m.StartDate is { } s && PeriodWindow.Ord(s) >= fromOrd && PeriodWindow.Ord(s) <= toOrd)
-                    .Select(m => m.StartDate!.Value.ToString("yyyy-MM-dd"))
-                    .OrderBy(s => s)
-                    .ToList()
-                : new List<string>();
+            // eDM send dates live on Placement.SendDates (one month can carry several).
+            // Fall back to the legacy single StartDate for any older row not yet migrated.
+            var sendDates = members
+                .SelectMany(m => m.SendDates.Length > 0
+                    ? m.SendDates
+                    : (m.StartDate is { } s ? new[] { s } : Array.Empty<DateOnly>()))
+                .Where(d => PeriodWindow.Ord(d) >= fromOrd && PeriodWindow.Ord(d) <= toOrd)
+                .Distinct()
+                .OrderBy(d => d)
+                .Select(d => d.ToString("yyyy-MM-dd"))
+                .ToList();
 
             return new DashboardPlacementDto(
                 Id: rep.GroupId ?? rep.Id,

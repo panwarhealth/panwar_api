@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 using Panwar.Api.Data;
@@ -11,9 +12,11 @@ using Panwar.Api.Data;
 namespace Panwar.Api.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    partial class AppDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260702003827_AddImportNameAlias")]
+    partial class AddImportNameAlias
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -1208,10 +1211,6 @@ namespace Panwar.Api.Migrations
 
                     b.Property<Guid>("PublisherId")
                         .HasColumnType("uuid");
-
-                    b.PrimitiveCollection<DateOnly[]>("SendDates")
-                        .IsRequired()
-                        .HasColumnType("date[]");
 
                     b.Property<DateOnly?>("StartDate")
                         .HasColumnType("date");

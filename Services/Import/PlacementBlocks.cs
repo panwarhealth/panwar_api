@@ -204,7 +204,7 @@ internal static class PlacementBlocks
         for (int c = brandCol + 1; c <= lastCol; c++)
         {
             var cell = ws.Cell(row, c);
-            var s = ReadString(cell);
+            var s = ReadDisplayString(cell);
             if (s is not null && ReadDecimal(cell) is null && s.Trim().Length > 3 && s.Any(char.IsLetter))
                 result.Add(s.Trim());
             if (cell.HasComment)

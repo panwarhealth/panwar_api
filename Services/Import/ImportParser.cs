@@ -60,33 +60,42 @@ public sealed class ImportParser
 
         doc.Sources.Add(new SourceInfo { File = ctx.FileName, FormatId = best.FormatId, Match = bestMatch.ToString() });
         best.Parse(wb, ctx, doc);
-        SnapshotTabs(wb, ctx, doc);
+        SnapshotWorkbook(wb, ctx, doc);
     }
 
-    // Bounded text snapshot of each sheet so the AI can read a tab a note refers
-    // to. Capped to keep the prompt small; the Lookup helper sheet is skipped.
-    private static void SnapshotTabs(IXLWorkbook wb, ParseContext ctx, ImportDocument doc)
+    // Whole-workbook snapshot the agentic AI tools read from and the grounding pass
+    // verifies against. Generous but bounded (comments can sit far from any block);
+    // sparse (only non-empty cells kept). Sheets hidden in Excel are scaffolding
+    // (lookups, per-month helpers) and are excluded entirely - the user can't see
+    // them, so neither the tab strip nor the AI should.
+    private static void SnapshotWorkbook(IXLWorkbook wb, ParseContext ctx, ImportDocument doc)
     {
-        const int maxRows = 60, maxCols = 16;
+        // 300 rows proved too small - the AP placements sheet runs past row 300, which
+        // left the bottom blocks with no on-card grid and unreadable by the AI.
+        const int maxRows = 600, maxCols = 40;
         foreach (var ws in wb.Worksheets)
         {
+            if (ws.Visibility != XLWorksheetVisibility.Visible) continue;
             if (ws.Name.Trim().Equals("Lookup", StringComparison.OrdinalIgnoreCase)) continue;
             int lastRow = Math.Min(ws.LastRowUsed()?.RowNumber() ?? 0, maxRows);
             int lastCol = Math.Min(ws.LastColumnUsed()?.ColumnNumber() ?? 0, maxCols);
             if (lastRow == 0 || lastCol == 0) continue;
 
-            var sb = new System.Text.StringBuilder();
+            var sheet = new SheetSnapshot { File = ctx.FileName, Sheet = ws.Name.Trim(), Rows = lastRow, Cols = lastCol };
             for (int r = 1; r <= lastRow; r++)
-            {
-                var cells = new List<string>();
                 for (int c = 1; c <= lastCol; c++)
                 {
-                    var s = Spreadsheet.ReadString(ws.Cell(r, c));
-                    if (s is not null) cells.Add($"{(char)('A' + c - 1)}={s}");
+                    var cell = ws.Cell(r, c);
+                    var s = Spreadsheet.ReadDisplayString(cell);
+                    if (s is not null) sheet.Cells[$"{Spreadsheet.ColLetter(c)}{r}"] = s;
+                    if (cell.HasComment)
+                    {
+                        var text = cell.GetComment().Text?.Trim();
+                        if (!string.IsNullOrEmpty(text))
+                            sheet.Comments.Add(new CellComment { Cell = $"{Spreadsheet.ColLetter(c)}{r}", Text = text });
+                    }
                 }
-                if (cells.Count > 0) sb.Append('r').Append(r).Append(": ").AppendLine(string.Join(" | ", cells));
-            }
-            doc.RawTabs.Add(new RawTab { File = ctx.FileName, Sheet = ws.Name.Trim(), Text = sb.ToString() });
+            doc.Snapshot.Add(sheet);
         }
     }
 }

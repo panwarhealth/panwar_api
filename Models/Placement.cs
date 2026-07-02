@@ -21,11 +21,13 @@ public class Placement
     public PlacementObjective Objective { get; set; }
 
     // Date semantics vary by template:
-    //   eDM        — StartDate is the send date; EndDate is null.
+    //   eDM        — SendDates holds every send date in the buy; StartDate is the earliest
+    //                (kept for range/year queries). EndDate is null.
     //   Education  — StartDate..EndDate is the activity range (may span years).
     //   others     — both null; LiveMonths is authoritative.
     public DateOnly? StartDate { get; set; }
     public DateOnly? EndDate { get; set; }
+    public DateOnly[] SendDates { get; set; } = Array.Empty<DateOnly>();  // eDM only — a month can carry several sends
     public EdmSubcategory? EdmSubcategory { get; set; }              // eDM only
     public EducationSubcategory? EducationSubcategory { get; set; }  // Education only
 
