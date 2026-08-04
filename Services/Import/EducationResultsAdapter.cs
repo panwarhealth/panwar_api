@@ -3,12 +3,10 @@ using static Panwar.Api.Services.Import.Spreadsheet;
 
 namespace Panwar.Api.Services.Import;
 
-// Pharmacy Club "EDUCATION RESULTS": an education-only workbook. One sheet, a
-// header row (Brand | <title col> | Expiry | Status/Month | month-date columns…),
-// then one row per module carrying monthly completions. No placements.
-public sealed class PharmacyClubAdapter : IWorkbookAdapter
+// "EDUCATION RESULTS" sheet: one row per module, month-date columns from F onward.
+public sealed class EducationResultsAdapter : IWorkbookAdapter
 {
-    public string FormatId => "pharmacy-club";
+    public string FormatId => "education-results";
 
     public AdapterMatch Detect(IXLWorkbook wb)
     {
@@ -63,7 +61,7 @@ public sealed class PharmacyClubAdapter : IWorkbookAdapter
             var asset = new ParsedEducationAsset
             {
                 Source = ctx.FileName,
-                Group = "Pharmacy Club",
+                Group = null,
                 Brand = brand,
                 Type = null,
                 Title = title,

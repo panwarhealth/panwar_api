@@ -1,8 +1,7 @@
 namespace Panwar.Api.Models;
 
 /// <summary>
-/// Global catalog of publishers (AJP, AP, Arterial, Healthed, AJGP, ADG,
-/// Princeton, NewsGP, MT, Praxhub, Pharmacy Club). Not scoped per client.
+/// Global catalog of publishers. Not scoped per client.
 /// </summary>
 public class Publisher
 {

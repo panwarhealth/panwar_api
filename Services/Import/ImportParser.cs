@@ -9,6 +9,7 @@ public sealed class ParseContext
     public string ClientSlug { get; init; } = "";
     public int Year { get; init; }
     public string FileName { get; init; } = "";
+    public MetricVocabulary Vocabulary { get; init; } = MetricVocabulary.Empty;
 }
 
 public interface IWorkbookAdapter
@@ -27,11 +28,11 @@ public sealed class ImportParser
     public static ImportParser Default() => new(new IWorkbookAdapter[]
     {
         new ResultsTemplateAdapter(),
-        new PrincetonAdapter(),
-        new PharmacyClubAdapter(),
-        new ResearchReviewAdapter(),
-        new SolusEdmAdapter(),
-        new ReckittReportAdapter(),
+        new MonthTabsAdapter(),
+        new EducationResultsAdapter(),
+        new AudienceDatabaseAdapter(),
+        new EmailCampaignReportAdapter(),
+        new PortalReportAdapter(),
     });
 
     public ImportDocument ParseFile(IXLWorkbook wb, ParseContext ctx)
@@ -53,30 +54,35 @@ public sealed class ImportParser
 
         if (best is null || bestMatch == AdapterMatch.None)
         {
-            doc.Sources.Add(new SourceInfo { File = ctx.FileName, FormatId = "unrecognised", Match = "none" });
-            doc.Warnings.Add(new Warning { Source = ctx.FileName, Message = "No adapter recognised this file's format" });
-            return;
+            int before = doc.Placements.Count + doc.Education.Count;
+            doc.Sources.Add(new SourceInfo { File = ctx.FileName, FormatId = "generic", Match = "Fallback" });
+            foreach (var ws in wb.Worksheets)
+            {
+                if (ws.Visibility != XLWorksheetVisibility.Visible) continue;
+                PlacementBlocks.Parse(ws, ctx, doc);
+            }
+            if (doc.Placements.Count + doc.Education.Count == before)
+                doc.Warnings.Add(new Warning
+                {
+                    Source = ctx.FileName,
+                    Message = "No placement blocks were found in this file - it needs a header row of metric names next to a brand cell, with month rows underneath",
+                });
         }
-
-        doc.Sources.Add(new SourceInfo { File = ctx.FileName, FormatId = best.FormatId, Match = bestMatch.ToString() });
-        best.Parse(wb, ctx, doc);
+        else
+        {
+            doc.Sources.Add(new SourceInfo { File = ctx.FileName, FormatId = best.FormatId, Match = bestMatch.ToString() });
+            best.Parse(wb, ctx, doc);
+        }
         SnapshotWorkbook(wb, ctx, doc);
     }
 
-    // Whole-workbook snapshot the agentic AI tools read from and the grounding pass
-    // verifies against. Generous but bounded (comments can sit far from any block);
-    // sparse (only non-empty cells kept). Sheets hidden in Excel are scaffolding
-    // (lookups, per-month helpers) and are excluded entirely - the user can't see
-    // them, so neither the tab strip nor the AI should.
+    // Sparse cell map + comments per visible sheet; what the AI tools read.
     private static void SnapshotWorkbook(IXLWorkbook wb, ParseContext ctx, ImportDocument doc)
     {
-        // 300 rows proved too small - the AP placements sheet runs past row 300, which
-        // left the bottom blocks with no on-card grid and unreadable by the AI.
         const int maxRows = 600, maxCols = 40;
         foreach (var ws in wb.Worksheets)
         {
             if (ws.Visibility != XLWorksheetVisibility.Visible) continue;
-            if (ws.Name.Trim().Equals("Lookup", StringComparison.OrdinalIgnoreCase)) continue;
             int lastRow = Math.Min(ws.LastRowUsed()?.RowNumber() ?? 0, maxRows);
             int lastCol = Math.Min(ws.LastColumnUsed()?.ColumnNumber() ?? 0, maxCols);
             if (lastRow == 0 || lastCol == 0) continue;

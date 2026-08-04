@@ -3,8 +3,8 @@ using static Panwar.Api.Services.Import.Spreadsheet;
 
 namespace Panwar.Api.Services.Import;
 
-// Panwar's own "Results Template" (AJP, AP, Arterial): block-structured PLACEMENTS
-// + an EDUCATION grid. The flagship adapter.
+// Panwar's own "Results Template" that publishers fill in: block-structured
+// PLACEMENTS + an EDUCATION grid. The flagship adapter.
 public sealed class ResultsTemplateAdapter : IWorkbookAdapter
 {
     public string FormatId => "results-template";
@@ -21,7 +21,7 @@ public sealed class ResultsTemplateAdapter : IWorkbookAdapter
 
     public void Parse(IXLWorkbook wb, ParseContext ctx, ImportDocument doc)
     {
-        // Some workbooks (Arterial) carry multiple year sheets ("2025 PLACEMENTS",
+        // Some workbooks carry multiple year sheets ("2025 PLACEMENTS",
         // "2026 PLACEMENTS"); parse the one matching the target year.
         var placementsSheets = wb.Worksheets
             .Where(w => w.Name.ToUpperInvariant().Contains("PLACEMENTS"))

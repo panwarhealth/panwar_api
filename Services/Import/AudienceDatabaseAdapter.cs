@@ -2,12 +2,10 @@ using ClosedXML.Excel;
 
 namespace Panwar.Api.Services.Import;
 
-// Research Review: the same block layout as the Results Template, but split into
-// per-audience sheets ("2026 - GP DATABASE", "2026 - PHARMACIST DATABASE"). The
-// audience comes from the sheet name; publisher is always research-review.
-public sealed class ResearchReviewAdapter : IWorkbookAdapter
+// Per-audience "DATABASE" sheets ("GP DATABASE 2026") in the placement-block layout.
+public sealed class AudienceDatabaseAdapter : IWorkbookAdapter
 {
-    public string FormatId => "research-review";
+    public string FormatId => "audience-database";
 
     public AdapterMatch Detect(IXLWorkbook wb)
     {
@@ -27,9 +25,7 @@ public sealed class ResearchReviewAdapter : IWorkbookAdapter
         foreach (var ws in sheets)
         {
             if (anyYear && !ws.Name.Contains(ctx.Year.ToString())) continue;
-            var u = ws.Name.ToUpperInvariant();
-            string? audience = u.Contains("PHARMACIST") ? "pharmacists" : u.Contains("GP") ? "gps" : null;
-            PlacementBlocks.Parse(ws, ctx, doc, publisherOverride: "research-review", audienceOverride: audience);
+            PlacementBlocks.Parse(ws, ctx, doc, audienceHint: ws.Name.Trim());
         }
     }
 }

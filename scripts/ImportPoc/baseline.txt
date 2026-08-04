@@ -1,0 +1,19 @@
+_Reckitt AP Results Template-2026 (2).xlsx                 results-template       Strong   P=21   E=12   W=0
+Copy of Reckitt Research Review Results Template-Q1.xlsx   audience-database      Strong   P=5    E=0    W=2
+MedToday - RB_Nurofen_SoluseDM_2605.xls                    email-campaign-report  Strong   P=1    E=0    W=1
+RB_Nurofen_SoluseDM_140426.xls                             email-campaign-report  Strong   P=1    E=0    W=1
+RB_Nurofen_SoluseDM_310326.xls                             email-campaign-report  Strong   P=1    E=0    W=1
+Reckitt AJP Results Template-2026.xlsx                     results-template       Strong   P=6    E=11   W=0
+Reckitt AJP Results Template-May 2026.xlsx                 results-template       Strong   P=7    E=11   W=0
+Reckitt AJP Results Template-Q1_2026.xlsx                  results-template       Strong   P=5    E=11   W=0
+Reckitt AP Results Template-Q1_2026.xlsx                   results-template       Strong   P=18   E=12   W=0
+Reckitt Arterial Results May-2026_VJ.xlsx                  results-template       Weak     P=19   E=0    W=0
+Reckitt Arterial Results Template-2026_WR.xlsx             results-template       Weak     P=14   E=0    W=0
+Reckitt Pharmacy Club Results Template_April-2026.xlsx     education-results      Strong   P=0    E=11   W=1
+Reckitt Pharmacy Club Results Template_February-2026.xlsx  education-results      Strong   P=0    E=10   W=1
+Reckitt Pharmacy Club Results Template_January-2026.xlsx   education-results      Strong   P=0    E=10   W=1
+Reckitt Pharmacy Club Results Template_May-2026.xlsx       education-results      Strong   P=0    E=12   W=1
+Reckitt Princeton Results - 31st March 2026.xlsx           month-tabs             Strong   P=9    E=0    W=0
+Reckitt Princeton Results - 31st May 2026.xlsx             month-tabs             Strong   P=15   E=0    W=0
+Reckitt Research Review Results Template-Q1.xlsx           audience-database      Strong   P=4    E=0    W=4
+Reckitt-Report-2026-May.xlsx                               portal-report          Strong   P=13   E=1    W=1

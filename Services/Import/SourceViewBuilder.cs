@@ -52,7 +52,7 @@ internal static class SourceViewBuilder
         return new[] { new SourceViewDto(sheet.Sheet, TabsFor(doc, source), rows) };
     }
 
-    // When a note names another tab ("refer to the AP Solus eDM data tab"), show that
+    // When a note names another tab ("refer to the eDM data tab"), show that
     // tab's patch on the card too, so the admin can cross-check the reference without
     // opening Excel. Deterministic - works even when the AI is off or cited nothing there.
     public static IReadOnlyList<SourceViewDto> BuildReferencedTabViews(
@@ -86,6 +86,13 @@ internal static class SourceViewBuilder
             .Where(x => x.Sheet.Length > 0 && x.Cell.Length > 0)
             .Distinct()
             .ToList();
+        return BuildCitedCellViews(doc, source, cited);
+    }
+
+    // Same excerpts from a plain list of cited cells - used for AI-extracted blocks,
+    // whose provenance lives on the actuals rather than on send suggestions.
+    public static IReadOnlyList<SourceViewDto> BuildCitedCellViews(ImportDocument doc, string source, IReadOnlyList<(string Sheet, string Cell)> cited)
+    {
         if (cited.Count == 0) return Array.Empty<SourceViewDto>();
 
         var views = new List<SourceViewDto>();

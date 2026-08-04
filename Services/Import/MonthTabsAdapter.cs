@@ -3,9 +3,10 @@ using static Panwar.Api.Services.Import.Spreadsheet;
 
 namespace Panwar.Api.Services.Import;
 
-public sealed class PrincetonAdapter : IWorkbookAdapter
+// One sheet per month (JAN..DEC), each a Day/Date grid summed into monthly sessions.
+public sealed class MonthTabsAdapter : IWorkbookAdapter
 {
-    public string FormatId => "princeton";
+    public string FormatId => "month-tabs";
 
     private static readonly Dictionary<string, int> Months = new(StringComparer.OrdinalIgnoreCase)
     {
@@ -89,14 +90,13 @@ public sealed class PrincetonAdapter : IWorkbookAdapter
             var total = sums[col];
             if (total == 0m) continue;
             var name = $"{asset} - {pieceName}";
-            var publisher = "princeton";
-            var template = Catalog.TemplateFromName(name, new[] { "sessions" });
+            var template = ctx.Vocabulary.InferTemplate(name, new[] { "sessions" });
             doc.Placements.Add(new ParsedPlacement
             {
                 Source = ctx.FileName,
                 Brand = brand,
-                Audience = Catalog.AudienceFor(publisher),
-                Publisher = publisher,
+                Audience = null,
+                Publisher = "",
                 Template = template,
                 Name = name,
                 Objective = "Awareness",
@@ -105,8 +105,6 @@ public sealed class PrincetonAdapter : IWorkbookAdapter
 
             if (declared.TryGetValue(col, out var d) && d is not null && Math.Abs(d.Value - total) > 0.5m)
                 doc.Warnings.Add(new Warning { Source = ctx.FileName, Message = $"'{name}' {MonthName(month)}: days sum to {total} but sheet total is {d.Value}" });
-            if (!Catalog.IsValidMetric(template, "sessions"))
-                doc.Warnings.Add(new Warning { Source = ctx.FileName, Message = $"'{name}': metric 'sessions' has no home in the {template} template - needs a metric mapping decision" });
         }
     }
 

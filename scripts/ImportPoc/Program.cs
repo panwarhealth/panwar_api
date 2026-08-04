@@ -5,6 +5,17 @@ using Panwar.Api.Services.Import;
 var path = args.Length > 0 ? args[0] : ".";
 var year = args.Length > 1 && int.TryParse(args[1], out var y) ? y : 2026;
 
+// The API reads this from metric_field; the harness has no database, so it carries
+// a stand-in copy. Only ever used to exercise the parser offline.
+var vocabulary = new MetricVocabulary(new Dictionary<string, IReadOnlySet<string>>(StringComparer.OrdinalIgnoreCase)
+{
+    ["DigitalDisplay"] = new HashSet<string> { "impressions", "clicks", "media_cost", "unique_impressions", "unique_clicks" },
+    ["Edm"] = new HashSet<string> { "sends", "opens", "clicks", "media_cost", "unique_opens", "unique_clicks", "downloads", "unique_downloads" },
+    ["Print"] = new HashSet<string> { "circulation", "placements_count", "media_cost" },
+    ["SponsoredContent"] = new HashSet<string> { "views", "organic_views", "downloads", "media_cost" },
+    ["Education"] = new HashSet<string> { "completions", "pending", "page_views", "media_cost", "unique_page_views", "downloads" },
+});
+
 var files = Directory.Exists(path)
     ? Directory.GetFiles(path, "*.xls*", SearchOption.AllDirectories).OrderBy(f => f).ToArray()
     : new[] { path };
@@ -18,7 +29,13 @@ foreach (var file in files)
     try
     {
         using var wb = WorkbookLoader.Load(File.ReadAllBytes(file));
-        parser.ParseInto(wb, new ParseContext { ClientSlug = "test", Year = year, FileName = Path.GetFileName(file) }, doc);
+        parser.ParseInto(wb, new ParseContext
+        {
+            ClientSlug = "test",
+            Year = year,
+            FileName = Path.GetFileName(file),
+            Vocabulary = vocabulary,
+        }, doc);
     }
     catch (Exception ex)
     {

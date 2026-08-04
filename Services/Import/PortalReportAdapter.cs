@@ -3,18 +3,11 @@ using static Panwar.Api.Services.Import.Spreadsheet;
 
 namespace Panwar.Api.Services.Import;
 
-// Reckitt-Report: the GP Therapy-Update / Arterial Education portal report. One
-// bespoke sheet per item: TU articles (page views), an education course
-// (enrolments/completions), an Advertising sheet (impressions/clicks per brand)
-// and an eDM sheet (per-send sends/opens/clicks). Figures are cumulative period
-// totals (e.g. "January 1st - May 15th"), so non-eDM items are assigned to the
-// period-end month and flagged for review; eDM sends carry their own date.
-public sealed class ReckittReportAdapter : IWorkbookAdapter
+// Education-portal report: one sheet per item (article, course, Advertising, eDM).
+// Figures are cumulative period totals, so non-eDM items land on the period-end month.
+public sealed class PortalReportAdapter : IWorkbookAdapter
 {
-    public string FormatId => "reckitt-report";
-
-    private const string Publisher = "arterial";
-    private const string Audience = "gps";
+    public string FormatId => "portal-report";
 
     private static readonly string[] MonthNames =
         { "january", "february", "march", "april", "may", "june", "july", "august", "september", "october", "november", "december" };
@@ -41,23 +34,23 @@ public sealed class ReckittReportAdapter : IWorkbookAdapter
         doc.Warnings.Add(new Warning
         {
             Source = ctx.FileName,
-            Message = "Reckitt-Report figures are cumulative period totals from the GP Therapy Update portal - non-eDM items are placed on the period-end month and may overlap the Arterial file; review before committing",
+            Message = "This portal report's figures are cumulative period totals - non-eDM items are placed on the period-end month and may overlap a monthly results workbook covering the same activity; review before committing",
         });
     }
 
-    // ── TU article: page views + unique page views ───────────────────────────
+    // ── Portal article: page views + unique page views ───────────────────────
     private static void ParseArticle(IXLWorksheet ws, ParseContext ctx, ImportDocument doc)
     {
-        var title = StripPrefix(FindCellContaining(ws, "TU article", 4), "TU article");
+        var title = StripUpToArticle(FindCellContaining(ws, "article", 4));
         if (title is null) return;
         int month = MaxMonth(ws) ?? 12;
 
         var placement = new ParsedPlacement
         {
             Source = ctx.FileName,
-            Brand = InferBrand(title),
-            Audience = Audience,
-            Publisher = Publisher,
+            Brand = "",
+            Audience = null,
+            Publisher = "",
             Template = "Education",
             Name = title,
             Objective = "Engagement",
@@ -67,7 +60,7 @@ public sealed class ReckittReportAdapter : IWorkbookAdapter
         if (placement.Actuals.Count > 0) doc.Placements.Add(placement);
     }
 
-    // ── Education course: 2026 enrolments + completions ──────────────────────
+    // ── Education course: enrolments + completions for the target year ───────
     private static void ParseCourse(IXLWorksheet ws, ParseContext ctx, ImportDocument doc)
     {
         var title = StripPrefix(FindCellContaining(ws, "Education course", 4), "Education course");
@@ -86,13 +79,13 @@ public sealed class ReckittReportAdapter : IWorkbookAdapter
             else if (a.StartsWith("Complet", StringComparison.OrdinalIgnoreCase)) completed = ReadDecimal(ws.Cell(r, 2));
         }
 
-        var asset = new ParsedEducationAsset { Source = ctx.FileName, Brand = InferBrand(title), Title = title };
+        var asset = new ParsedEducationAsset { Source = ctx.FileName, Brand = "", Title = title };
         if (completed is not null) asset.Values.Add(new ParsedEducationValue { Status = "Completed", Year = ctx.Year, Month = month, Value = completed.Value });
         if (enrolled is not null) asset.Values.Add(new ParsedEducationValue { Status = "Enrolled", Year = ctx.Year, Month = month, Value = enrolled.Value });
         if (asset.Values.Count > 0) doc.Education.Add(asset);
     }
 
-    // ── Advertising: impressions + clicks per brand block ────────────────────
+    // ── Advertising: impressions + clicks per section block ──────────────────
     private static void ParseAdvertising(IXLWorksheet ws, ParseContext ctx, ImportDocument doc)
     {
         int lastRow = ws.LastRowUsed()?.RowNumber() ?? 0;
@@ -115,16 +108,16 @@ public sealed class ReckittReportAdapter : IWorkbookAdapter
             }
             else
             {
-                // A brand/section header starts a new digital-display placement.
+                // A section header starts a new digital-display placement.
                 if (current is not null && current.Actuals.Count > 0) doc.Placements.Add(current);
                 current = new ParsedPlacement
                 {
                     Source = ctx.FileName,
-                    Brand = InferBrand(a),
-                    Audience = Audience,
-                    Publisher = Publisher,
+                    Brand = a,
+                    Audience = null,
+                    Publisher = "",
                     Template = "DigitalDisplay",
-                    Name = $"GP Portal Advertising - {a}",
+                    Name = $"Portal Advertising - {a}",
                     Objective = "Awareness",
                 };
             }
@@ -165,9 +158,9 @@ public sealed class ReckittReportAdapter : IWorkbookAdapter
             var placement = new ParsedPlacement
             {
                 Source = ctx.FileName,
-                Brand = "Nurofen",
-                Audience = Audience,
-                Publisher = Publisher,
+                Brand = "",
+                Audience = null,
+                Publisher = "",
                 Template = "Edm",
                 Name = name,
                 Objective = "Awareness",
@@ -180,7 +173,9 @@ public sealed class ReckittReportAdapter : IWorkbookAdapter
     }
 
     // ── helpers ──────────────────────────────────────────────────────────────
-    private static bool HasArticleMarker(IXLWorksheet ws) => FindCellContaining(ws, "TU article", 4) is not null;
+    // Both markers required: "article" alone hits unrelated headings.
+    private static bool HasArticleMarker(IXLWorksheet ws)
+        => FindCellContaining(ws, "article", 4) is not null && FindLabelRow(ws, "Page Views", 30) != 0;
 
     private static void AddIf(ParsedPlacement p, string metric, int month, decimal? value)
     {
@@ -212,6 +207,16 @@ public sealed class ReckittReportAdapter : IWorkbookAdapter
             if (a is not null && a.Contains(needle, StringComparison.OrdinalIgnoreCase)) return a;
         }
         return null;
+    }
+
+    // "<label> article - Some Title" -> "Some Title"
+    private static string? StripUpToArticle(string? s)
+    {
+        if (s is null) return null;
+        var i = s.IndexOf("article", StringComparison.OrdinalIgnoreCase);
+        if (i < 0) return s.Trim();
+        var rest = s[(i + "article".Length)..].TrimStart(' ', '-', ':').Trim();
+        return rest.Length == 0 ? null : rest;
     }
 
     private static string? StripPrefix(string? s, string prefix)
@@ -253,16 +258,5 @@ public sealed class ReckittReportAdapter : IWorkbookAdapter
         for (int i = 0; i < 12; i++)
             if (l.Contains(MonthNames[i]) || l.Contains(MonthNames[i].Substring(0, 3))) return i + 1;
         return null;
-    }
-
-    private static string InferBrand(string s)
-    {
-        var l = s.ToLowerInvariant();
-        if (l.Contains("ppi") || l.Contains("reflux") || l.Contains("gord") || l.Contains("gut") || l.Contains("gastro") || l.Contains("laxative") || l.Contains("gaviscon"))
-            return "Gaviscon";
-        if (l.Contains("child") || l.Contains("paediatric") || l.Contains("pediatric") || l.Contains("infant") || l.Contains("vaccinat") || l.Contains("fever") || l.Contains("nfc"))
-            return "NFC";
-        if (l.Contains("cold") || l.Contains("flu")) return "C&F";
-        return "Nurofen";
     }
 }

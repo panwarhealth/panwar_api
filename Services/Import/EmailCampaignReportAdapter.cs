@@ -4,14 +4,10 @@ using static Panwar.Api.Services.Import.Spreadsheet;
 
 namespace Panwar.Api.Services.Import;
 
-// Standalone Solus eDM campaign export (e.g. MedToday "Email Campaign Report",
-// a legacy .xls). One send = one eDM placement's actuals for the delivery month:
-// a key/value block (Total Recipients, Successful Deliveries, Total Opens,
-// Recipients Who Opened, Total Clicks, Recipients Who Clicked) plus a Clicks-by-URL
-// table. Publisher is left unresolved for the admin to map in the preview.
-public sealed class SolusEdmAdapter : IWorkbookAdapter
+// "Email Campaign Report" export: one send, as a label/value block in columns A/B.
+public sealed class EmailCampaignReportAdapter : IWorkbookAdapter
 {
-    public string FormatId => "solus-edm";
+    public string FormatId => "email-campaign-report";
 
     private static readonly string[] MonthNames =
         { "january", "february", "march", "april", "may", "june", "july", "august", "september", "october", "november", "december" };
@@ -63,17 +59,16 @@ public sealed class SolusEdmAdapter : IWorkbookAdapter
 
         if (title is null || month is null || vals.Count == 0)
         {
-            doc.Warnings.Add(new Warning { Source = ctx.FileName, Message = "Solus eDM report recognised but key fields (title/date/metrics) could not be read" });
+            doc.Warnings.Add(new Warning { Source = ctx.FileName, Message = "Email campaign report recognised but key fields (title/date/metrics) could not be read" });
             return;
         }
 
-        var publisher = ResolvePublisher(title) ?? "";
         var placement = new ParsedPlacement
         {
             Source = ctx.FileName,
             Brand = "",
-            Audience = Catalog.AudienceFor(publisher),
-            Publisher = publisher,
+            Audience = null,
+            Publisher = "",
             Template = "Edm",
             Name = title,
             Objective = "Awareness",
@@ -85,7 +80,7 @@ public sealed class SolusEdmAdapter : IWorkbookAdapter
         doc.Warnings.Add(new Warning
         {
             Source = ctx.FileName,
-            Message = $"Solus eDM '{title}' read for {MonthNames[month.Value - 1]} - map it to the matching eDM placement in the preview",
+            Message = $"Email campaign '{title}' read for {MonthNames[month.Value - 1]} - map it to the matching eDM placement in the preview",
         });
     }
 

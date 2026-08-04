@@ -13,12 +13,8 @@ using Panwar.Api.Services.Ai;
 
 namespace Panwar.Api.Services.Import;
 
-// Agentic suggestion engine that runs BEFORE the human gate. For flagged blocks
-// with an actionable human signal, it lets Claude read the workbook via tools
-// (list_tabs/read_tab/read_cells/read_comments), reconcile each block into per-send
-// proposals, and cite the source cell of any value it pulls. Every proposal is
-// verified deterministically and every cited value is grounded against the workbook
-// snapshot here; the AI never writes. The whole run is recorded to import_ai_log.
+// Agentic loop over the workbook snapshot. Every cited value is re-checked against
+// the snapshot before it is surfaced; the AI never writes. Runs logged to import_ai_log.
 public class ImportReconciliationService : IImportReconciliationService
 {
     private const double ConfidenceFloor = 0.7;   // below this we surface the topic but don't pre-fill a target
@@ -77,6 +73,48 @@ public class ImportReconciliationService : IImportReconciliationService
     }
     """;
 
+    // ── Extraction mode: files no deterministic adapter could parse ──────────
+    private static string BuildExtractSystemPrompt(MetricVocabulary vocabulary) =>
+        "You extract media results from a client spreadsheet whose layout our deterministic parser does not recognise.\n" +
+        "- Use the tools to read the tabs and work out the layout, then report every placement-level result you find: display/banner campaigns, eDM or email sends, sponsored content, education modules.\n" +
+        "- One block per placement/campaign/send, named the way the file names it. If one month has several separately-reported sends, make each send its own block.\n" +
+        "- Every value needs the calendar month (1-12) it belongs to; a single-send report belongs to its send or delivery date's month. Never spread a total across months.\n" +
+        "- Never invent, sum or derive a number - only report values you read from a cell via a tool, each with the exact source_sheet and source_cell you read it from.\n" +
+        $"- metric must be one of: {string.Join(", ", vocabulary.AllKeys)}. label is the file's own name for that number (e.g. \"Recipients Who Opened\"). Totals map to opens/clicks/sends; per-recipient counts map to the unique_ metrics. Skip rates, percentages and anything with no fitting metric.\n" +
+        "- If the file states actual send dates for an email, return them in that month's send_dates as ISO YYYY-MM-DD dates.\n" +
+        "- notes: short human-written guidance a reviewer should see (per block, or per month via note).\n" +
+        "When finished, call submit_result.";
+
+    private const string ExtractSchemaJson = """
+    {
+      "type": "object", "additionalProperties": false, "required": ["blocks"],
+      "properties": { "blocks": { "type": "array", "items": {
+        "type": "object", "additionalProperties": false, "required": ["name", "months"],
+        "properties": {
+          "name": { "type": "string" },
+          "brand": { "type": "string" },
+          "notes": { "type": "array", "items": { "type": "string" } },
+          "months": { "type": "array", "items": {
+            "type": "object", "additionalProperties": false, "required": ["month", "values"],
+            "properties": {
+              "month": { "type": "integer" },
+              "note": { "type": "string" },
+              "send_dates": { "type": "array", "items": { "type": "string" } },
+              "values": { "type": "array", "items": {
+                "type": "object", "additionalProperties": false,
+                "required": ["metric", "label", "value", "source_sheet", "source_cell"],
+                "properties": {
+                  "metric": { "type": "string" },
+                  "label": { "type": "string" },
+                  "value": { "type": "number" },
+                  "source_sheet": { "type": "string" },
+                  "source_cell": { "type": "string" }
+                } } }
+            } } }
+        } } } }
+    }
+    """;
+
     private static readonly JsonSerializerOptions Json = new() { PropertyNameCaseInsensitive = true };
 
     private readonly AppDbContext _context;
@@ -117,6 +155,14 @@ public class ImportReconciliationService : IImportReconciliationService
             fileHashByName.TryGetValue(file, out var hash);
 
             List<CachedBlock>? blocks = await TryReadCacheAsync(clientId, hash, ct);
+            // A cached answer names the placements it chose. If any of those are gone,
+            // it was reasoning about a set of placements that no longer exists, so it
+            // gets thrown away and worked out again rather than patched up.
+            if (blocks is not null && !TargetsStillExist(blocks, candidates))
+            {
+                _logger.LogInformation("Discarding cached AI answer for {File}: it points at placements that no longer exist", file);
+                blocks = null;
+            }
             if (blocks is null)
             {
                 if (!allowLive) continue; // preview path: cache-only, no AI calls
@@ -132,9 +178,7 @@ public class ImportReconciliationService : IImportReconciliationService
                     failedFiles.Add(file);
                     continue;
                 }
-                // A run that never reached submit_result (truncated by the token or
-                // iteration cap) is a failure too: report it and don't cache it, so it
-                // retries next time instead of freezing "no suggestions" forever.
+                // Never cache an incomplete run; it must retry next time.
                 if (completed) await WriteCacheAsync(clientId, hash, blocks, ct);
                 else failedFiles.Add(file);
             }
@@ -150,6 +194,255 @@ public class ImportReconciliationService : IImportReconciliationService
         }
 
         return new ReconResult(result, failedFiles);
+    }
+
+    private static bool TargetsStillExist(List<CachedBlock> blocks, IReadOnlyList<ReconCandidate> candidates)
+    {
+        var live = candidates.Select(c => c.Id).ToHashSet();
+        return blocks
+            .SelectMany(b => b.Sends)
+            .Select(s => s.TargetPlacementId)
+            .OfType<Guid>()
+            .All(live.Contains);
+    }
+
+    public async Task<ExtractResult> ExtractAsync(
+        Guid clientId,
+        ImportDocument doc,
+        IReadOnlyList<string> files,
+        IReadOnlyDictionary<string, string> fileHashByName,
+        MetricVocabulary vocabulary,
+        Guid? userId,
+        bool allowLive,
+        Guid jobId,
+        CancellationToken ct)
+    {
+        var byFile = new Dictionary<string, List<ParsedPlacement>>(StringComparer.Ordinal);
+        var failedFiles = new List<string>();
+        if (!IsEnabled || files.Count == 0) return new ExtractResult(byFile, failedFiles);
+
+        foreach (var file in files)
+        {
+            fileHashByName.TryGetValue(file, out var hash);
+            // Distinct key per mode: the two modes cache different JSON shapes.
+            var cacheHash = ExtractCacheHash(hash);
+
+            var cached = await TryReadExtractCacheAsync(clientId, cacheHash, ct);
+            if (cached is null)
+            {
+                if (!allowLive) continue;
+                _progress.Report(jobId, $"The AI is working out the layout of {file} - this is the slow bit, usually a minute or two...");
+                bool completed;
+                try
+                {
+                    (cached, completed) = await RunExtractFileAsync(clientId, doc, file, hash, vocabulary, userId, jobId, ct);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "AI extraction failed for file {File}", file);
+                    failedFiles.Add(file);
+                    continue;
+                }
+                if (completed) await WriteCacheJsonAsync(clientId, cacheHash, JsonSerializer.Serialize(cached), ct);
+                else { failedFiles.Add(file); continue; }
+            }
+
+            byFile[file] = ToPlacements(file, cached, vocabulary);
+        }
+
+        return new ExtractResult(byFile, failedFiles);
+    }
+
+    private async Task<(List<CachedExtractBlock> Blocks, bool Completed)> RunExtractFileAsync(
+        Guid clientId, ImportDocument doc, string file, string? hash, MetricVocabulary vocabulary,
+        Guid? userId, Guid jobId, CancellationToken ct)
+    {
+        var sheets = doc.Snapshot.Where(s => string.Equals(s.File, file, StringComparison.OrdinalIgnoreCase)).ToList();
+
+        var sb = new StringBuilder();
+        sb.AppendLine($"FILE: {file} (reporting year {doc.Year}). Our parser recognised nothing in it - extract the results yourself.");
+        sb.AppendLine();
+        sb.AppendLine("WORKBOOK TABS you can inspect with the tools (list_tabs/read_tab/read_cells/read_comments):");
+        foreach (var s in sheets)
+            sb.AppendLine($"    {s.Sheet} ({s.Rows} rows x {s.Cols} cols, {s.Comments.Count} comment(s))");
+
+        var systemPrompt = BuildExtractSystemPrompt(vocabulary);
+        var cellsRead = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        var tools = BuildTools(ExtractSchemaJson, "Submit every placement block you extracted from the file.");
+        var request = new AgentRunRequest(
+            systemPrompt, sb.ToString(), tools, "submit_result",
+            (name, input, c) =>
+            {
+                _progress.Report(jobId, DescribeToolCall(name, input, file));
+                return Task.FromResult(ExecuteTool(name, input, sheets, cellsRead));
+            },
+            OnStatus: msg => _progress.Report(jobId, msg));
+
+        var sw = Stopwatch.StartNew();
+        var run = await _anthropic.RunToolLoopAsync(request, ct);
+        sw.Stop();
+
+        if (run.HitMaxIterations)
+            _logger.LogWarning(
+                "AI extraction for {File} hit the {Max}-iteration cap - result may be incomplete",
+                file, request.MaxIterations);
+
+        _progress.Report(jobId, "Double-checking the AI's numbers against your file...");
+        var verification = new JsonArray();
+        var grounding = new JsonArray();
+        var blocks = BuildExtractedBlocks(run.Answer, sheets, cellsRead, vocabulary, verification, grounding);
+
+        await WriteLogAsync(clientId, file, hash, userId, systemPrompt, run, cellsRead, verification, grounding, (int)sw.ElapsedMilliseconds, ct);
+
+        var completed = run.Answer is JsonElement a
+            && a.ValueKind == JsonValueKind.Object
+            && a.TryGetProperty("blocks", out _);
+        return (blocks, completed);
+    }
+
+    private List<CachedExtractBlock> BuildExtractedBlocks(
+        JsonElement? answer,
+        List<SheetSnapshot> sheets,
+        Dictionary<string, string> cellsRead,
+        MetricVocabulary vocabulary,
+        JsonArray verification,
+        JsonArray grounding)
+    {
+        var output = new List<CachedExtractBlock>();
+        if (answer is not JsonElement ans) return output;
+
+        var validMetrics = vocabulary.AllKeys.ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var parsed = ans.Deserialize<AiExtractResponse>(Json);
+        foreach (var b in parsed?.Blocks ?? new())
+        {
+            if (string.IsNullOrWhiteSpace(b.Name)) continue;
+            var block = new CachedExtractBlock
+            {
+                Name = b.Name.Trim(),
+                Brand = b.Brand?.Trim() ?? "",
+                Notes = (b.Notes ?? new()).Where(n => !string.IsNullOrWhiteSpace(n)).Select(n => n.Trim()).ToList(),
+            };
+            foreach (var m in b.Months ?? new())
+            {
+                bool monthOk = m.Month is >= 1 and <= 12;
+                verification.Add(new JsonObject
+                {
+                    ["block"] = block.Name,
+                    ["month"] = m.Month,
+                    ["kept"] = monthOk,
+                    ["reason"] = monthOk ? null : "month out of range",
+                });
+                if (!monthOk) continue;
+
+                var month = new CachedExtractMonth
+                {
+                    Month = m.Month,
+                    Note = string.IsNullOrWhiteSpace(m.Note) ? null : m.Note.Trim(),
+                    SendDates = NormalizeSendDates(m.SendDates).ToList(),
+                };
+                foreach (var v in m.Values ?? new())
+                {
+                    var metric = (v.Metric ?? "").Trim().ToLowerInvariant();
+                    var sheetName = (v.SourceSheet ?? "").Trim();
+                    var cell = (v.SourceCell ?? "").Trim().ToUpperInvariant();
+                    var key = $"{sheetName}!{cell}";
+                    var sheet = FindSheet(sheets, sheetName);
+
+                    string verdict;
+                    decimal? actual = null;
+                    if (!validMetrics.Contains(metric)) verdict = "unknown_metric";
+                    else if (!cellsRead.ContainsKey(key)) verdict = "not_read";
+                    else if (sheet is null || !sheet.Cells.TryGetValue(cell, out var raw)) verdict = "missing";
+                    else if (!decimal.TryParse(raw, NumberStyles.Any, CultureInfo.InvariantCulture, out var a)) verdict = "not_numeric";
+                    else { actual = a; verdict = Math.Abs(a - v.Value) <= GroundingTolerance ? "ok" : "mismatch"; }
+
+                    grounding.Add(new JsonObject
+                    {
+                        ["kind"] = "extract",
+                        ["metric"] = metric,
+                        ["sheet"] = sheetName,
+                        ["cell"] = cell,
+                        ["claimed"] = v.Value,
+                        ["actual"] = actual,
+                        ["verdict"] = verdict,
+                    });
+
+                    if (verdict == "ok")
+                        month.Values.Add(new CachedExtractValue
+                        {
+                            Metric = metric,
+                            Label = v.Label?.Trim() ?? "",
+                            Value = v.Value,
+                            Sheet = sheetName,
+                            Cell = cell,
+                        });
+                }
+                if (month.Values.Count > 0 || month.Note is not null) block.Months.Add(month);
+            }
+            if (block.Months.Count > 0) output.Add(block);
+        }
+        return output;
+    }
+
+    private static List<ParsedPlacement> ToPlacements(string file, List<CachedExtractBlock> blocks, MetricVocabulary vocabulary)
+    {
+        var result = new List<ParsedPlacement>();
+        foreach (var b in blocks)
+        {
+            var keys = b.Months.SelectMany(m => m.Values).Select(v => v.Metric).Distinct().ToList();
+            if (keys.Count == 0) continue;
+            var pp = new ParsedPlacement
+            {
+                Source = file,
+                Brand = b.Brand,
+                Audience = null,
+                Publisher = "",
+                Template = vocabulary.InferTemplate(b.Name, keys),
+                Name = b.Name,
+                Objective = Spreadsheet.InferObjective(b.Name),
+                FromAi = true,
+            };
+            foreach (var m in b.Months.OrderBy(x => x.Month))
+            {
+                if (m.Note is not null) pp.MonthNotes[m.Month] = m.Note;
+                var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                foreach (var v in m.Values)
+                {
+                    if (!seen.Add(v.Metric)) continue;
+                    var normLabel = MetricNaming.Normalize(v.Label);
+                    pp.Actuals.Add(new ParsedActual
+                    {
+                        Metric = v.Metric,
+                        Month = m.Month,
+                        Value = v.Value,
+                        Note = normLabel.Length == 0 || string.Equals(normLabel, v.Metric, StringComparison.OrdinalIgnoreCase)
+                            ? null : $"file calls this '{v.Label}'",
+                        SourceSheet = v.Sheet,
+                        SourceCell = v.Cell,
+                    });
+                }
+                if (m.SendDates.Count > 0)
+                    pp.Notes.Add($"Send date{(m.SendDates.Count > 1 ? "s" : "")}: {string.Join(", ", m.SendDates)}");
+            }
+            pp.Notes.AddRange(b.Notes);
+            if (pp.Actuals.Count > 0) result.Add(pp);
+        }
+        return result;
+    }
+
+    private static string ExtractCacheHash(string? hash)
+        => string.IsNullOrEmpty(hash)
+            ? ""
+            : Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(Encoding.UTF8.GetBytes("extract|" + hash))).ToLowerInvariant();
+
+    private async Task<List<CachedExtractBlock>?> TryReadExtractCacheAsync(Guid clientId, string cacheHash, CancellationToken ct)
+    {
+        if (cacheHash.Length == 0) return null;
+        var row = await _context.ImportAiCaches.AsNoTracking()
+            .FirstOrDefaultAsync(c => c.ClientId == clientId && c.ContentHash == cacheHash, ct);
+        if (row is null) return null;
+        try { return JsonSerializer.Deserialize<List<CachedExtractBlock>>(row.SuggestionsJson, Json); }
+        catch { return null; }
     }
 
     private async Task<(List<CachedBlock> Blocks, bool Completed)> RunFileAsync(
@@ -172,12 +465,11 @@ public class ImportReconciliationService : IImportReconciliationService
         var userContent = BuildUserContent(flagged, blocksByRef, candByRef, sheets);
 
         var cellsRead = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-        var tools = BuildTools();
+        var tools = BuildTools(SubmitSchemaJson, "Submit the final per-send reconciliation for every flagged block.");
         var request = new AgentRunRequest(
             SystemPrompt, userContent, tools, "submit_result",
             (name, input, c) =>
             {
-                // Narrate what the AI is doing so the frontend's live status has real steps.
                 _progress.Report(jobId, DescribeToolCall(name, input, file));
                 return Task.FromResult(ExecuteTool(name, input, sheets, cellsRead));
             },
@@ -197,10 +489,9 @@ public class ImportReconciliationService : IImportReconciliationService
         var grounding = new JsonArray();
         var output = BuildSuggestions(run.Answer, blocksByRef, candByRef, sheets, cellsRead, verification, grounding);
 
-        await WriteLogAsync(clientId, file, hash, userId, run, cellsRead, verification, grounding, (int)sw.ElapsedMilliseconds, ct);
+        await WriteLogAsync(clientId, file, hash, userId, SystemPrompt, run, cellsRead, verification, grounding, (int)sw.ElapsedMilliseconds, ct);
 
-        // Completed = a real answer, not just any answer: a truncated submit_result comes
-        // back as {} and must count as a failure (retry next time), never be cached.
+        // A truncated submit_result arrives as {}, so require the "blocks" property.
         var completed = run.Answer is JsonElement a
             && a.ValueKind == JsonValueKind.Object
             && a.TryGetProperty("blocks", out _);
@@ -237,11 +528,14 @@ public class ImportReconciliationService : IImportReconciliationService
         sb.AppendLine();
         sb.AppendLine("EXISTING PLACEMENTS you may map to (use the number as target_ref, or 0 for none):");
         foreach (var (rf, c) in candByRef.OrderBy(x => x.Key))
-            sb.AppendLine($"[{rf}] {c.Name} ({c.Template})");
+        {
+            var held = c.Months.Count > 0 ? string.Join(", ", c.Months) : "none";
+            sb.AppendLine($"[{rf}] {c.Name} ({c.Template}) - already has numbers for month(s): {held}");
+        }
         return sb.ToString();
     }
 
-    private static IReadOnlyList<AgentTool> BuildTools() => new[]
+    private static IReadOnlyList<AgentTool> BuildTools(string submitSchemaJson, string submitDescription) => new[]
     {
         new AgentTool("list_tabs", "List the workbook's sheet names with their row/column extents.",
             JsonNode.Parse("""{"type":"object","additionalProperties":false,"properties":{}}""")!),
@@ -251,8 +545,8 @@ public class ImportReconciliationService : IImportReconciliationService
             JsonNode.Parse("""{"type":"object","additionalProperties":false,"required":["sheet","cells"],"properties":{"sheet":{"type":"string"},"cells":{"type":"array","items":{"type":"string"}}}}""")!),
         new AgentTool("read_comments", "Read the Excel cell-comments on a sheet (or all sheets if none given), each with its cell reference.",
             JsonNode.Parse("""{"type":"object","additionalProperties":false,"properties":{"sheet":{"type":"string"}}}""")!),
-        new AgentTool("submit_result", "Submit the final per-send reconciliation for every flagged block.",
-            JsonNode.Parse(SubmitSchemaJson)!),
+        new AgentTool("submit_result", submitDescription,
+            JsonNode.Parse(submitSchemaJson)!),
     };
 
     private static string ExecuteTool(string name, JsonElement input, List<SheetSnapshot> sheets, Dictionary<string, string> cellsRead)
@@ -376,10 +670,7 @@ public class ImportReconciliationService : IImportReconciliationService
         return output;
     }
 
-    // The AI is told to return ISO dates; hold it to that. Strict yyyy-MM-dd only -
-    // a slash-format date is ambiguous (day-first vs month-first) and silently
-    // swapping 03/06 would be worse than dropping it, since the human can see the
-    // missing chip and add the date on the card.
+    // Strict ISO only: a slash date is day/month ambiguous, so drop rather than guess.
     private static IReadOnlyList<string> NormalizeSendDates(List<string>? raw)
     {
         if (raw is null || raw.Count == 0) return Array.Empty<string>();
@@ -393,8 +684,7 @@ public class ImportReconciliationService : IImportReconciliationService
         return kept.ToList();
     }
 
-    // Anti-hallucination: only keep a cited value if the cell was actually served to
-    // the AI via a tool AND its snapshot value matches the claimed value.
+    // Keep a value only if that cell was served by a tool and still matches.
     private static List<SuggestionValueDto> GroundValues(
         List<AiValue>? values, List<SheetSnapshot> sheets, Dictionary<string, string> cellsRead, JsonArray grounding)
     {
@@ -429,9 +719,7 @@ public class ImportReconciliationService : IImportReconciliationService
         return kept;
     }
 
-    // Evidence cells (a note, a date label) get the same discipline as values, minus
-    // the numeric comparison: the AI must have actually read the cell and it must
-    // hold something - otherwise the citation is dropped and logged.
+    // As GroundValues, without the numeric compare.
     private static List<SuggestionCellRefDto> GroundEvidence(
         List<AiEvidence>? evidence, List<SheetSnapshot> sheets, Dictionary<string, string> cellsRead, JsonArray grounding)
     {
@@ -464,7 +752,7 @@ public class ImportReconciliationService : IImportReconciliationService
     }
 
     private async Task WriteLogAsync(
-        Guid clientId, string file, string? hash, Guid? userId, AgentRunResult run,
+        Guid clientId, string file, string? hash, Guid? userId, string systemPrompt, AgentRunResult run,
         Dictionary<string, string> cellsRead, JsonArray verification, JsonArray grounding, int durationMs, CancellationToken ct)
     {
         try
@@ -477,7 +765,7 @@ public class ImportReconciliationService : IImportReconciliationService
                 ContentHash = hash ?? "",
                 Model = _anthropic.Model,
                 RequestedByUserId = userId,
-                SystemPrompt = SystemPrompt,
+                SystemPrompt = systemPrompt,
                 TranscriptJson = run.TranscriptJson,
                 AnswerJson = run.Answer?.GetRawText(),
                 VerificationJson = verification.ToJsonString(),
@@ -493,12 +781,10 @@ public class ImportReconciliationService : IImportReconciliationService
         }
         catch (Exception ex)
         {
-            // The audit log must never break the import; a failed write is logged and swallowed.
             _logger.LogWarning(ex, "Failed to write import_ai_log for {File}", file);
         }
     }
 
-    // Spells out exactly what the AI asked to read, for the live status line.
     private static string DescribeToolCall(string name, JsonElement input, string file)
     {
         var sheet = GetString(input, "sheet");
@@ -546,19 +832,33 @@ public class ImportReconciliationService : IImportReconciliationService
         catch { return null; }
     }
 
-    private async Task WriteCacheAsync(Guid clientId, string? hash, List<CachedBlock> blocks, CancellationToken ct)
+    private Task WriteCacheAsync(Guid clientId, string? hash, List<CachedBlock> blocks, CancellationToken ct)
+        => WriteCacheJsonAsync(clientId, hash ?? "", JsonSerializer.Serialize(blocks), ct);
+
+    // Overwrites rather than skips: a re-run only happens when the cached answer was
+    // thrown away, so skipping the write would leave the bad row in place and make
+    // every future preview pay for a fresh AI run that is never kept.
+    private async Task WriteCacheJsonAsync(Guid clientId, string hash, string json, CancellationToken ct)
     {
-        if (string.IsNullOrEmpty(hash)) return;
-        var exists = await _context.ImportAiCaches.AnyAsync(c => c.ClientId == clientId && c.ContentHash == hash, ct);
-        if (exists) return;
-        _context.ImportAiCaches.Add(new ImportAiCache
+        if (hash.Length == 0) return;
+        var existing = await _context.ImportAiCaches
+            .FirstOrDefaultAsync(c => c.ClientId == clientId && c.ContentHash == hash, ct);
+        if (existing is not null)
         {
-            Id = Guid.NewGuid(),
-            ClientId = clientId,
-            ContentHash = hash,
-            SuggestionsJson = JsonSerializer.Serialize(blocks),
-            CreatedAt = DateTime.UtcNow,
-        });
+            existing.SuggestionsJson = json;
+            existing.CreatedAt = DateTime.UtcNow;
+        }
+        else
+        {
+            _context.ImportAiCaches.Add(new ImportAiCache
+            {
+                Id = Guid.NewGuid(),
+                ClientId = clientId,
+                ContentHash = hash,
+                SuggestionsJson = json,
+                CreatedAt = DateTime.UtcNow,
+            });
+        }
         await _context.SaveChangesAsync(ct);
     }
 
@@ -567,6 +867,61 @@ public class ImportReconciliationService : IImportReconciliationService
         public string Name { get; set; } = "";
         public string Brand { get; set; } = "";
         public List<PlacementSuggestionDto> Sends { get; set; } = new();
+    }
+
+    private sealed class CachedExtractBlock
+    {
+        public string Name { get; set; } = "";
+        public string Brand { get; set; } = "";
+        public List<string> Notes { get; set; } = new();
+        public List<CachedExtractMonth> Months { get; set; } = new();
+    }
+
+    private sealed class CachedExtractMonth
+    {
+        public int Month { get; set; }
+        public string? Note { get; set; }
+        public List<string> SendDates { get; set; } = new();
+        public List<CachedExtractValue> Values { get; set; } = new();
+    }
+
+    private sealed class CachedExtractValue
+    {
+        public string Metric { get; set; } = "";
+        public string Label { get; set; } = "";
+        public decimal Value { get; set; }
+        public string Sheet { get; set; } = "";
+        public string Cell { get; set; } = "";
+    }
+
+    private sealed class AiExtractResponse
+    {
+        [JsonPropertyName("blocks")] public List<AiExtractBlock>? Blocks { get; set; }
+    }
+
+    private sealed class AiExtractBlock
+    {
+        [JsonPropertyName("name")] public string? Name { get; set; }
+        [JsonPropertyName("brand")] public string? Brand { get; set; }
+        [JsonPropertyName("notes")] public List<string>? Notes { get; set; }
+        [JsonPropertyName("months")] public List<AiExtractMonth>? Months { get; set; }
+    }
+
+    private sealed class AiExtractMonth
+    {
+        [JsonPropertyName("month")] public int Month { get; set; }
+        [JsonPropertyName("note")] public string? Note { get; set; }
+        [JsonPropertyName("send_dates")] public List<string>? SendDates { get; set; }
+        [JsonPropertyName("values")] public List<AiExtractValue>? Values { get; set; }
+    }
+
+    private sealed class AiExtractValue
+    {
+        [JsonPropertyName("metric")] public string? Metric { get; set; }
+        [JsonPropertyName("label")] public string? Label { get; set; }
+        [JsonPropertyName("value")] public decimal Value { get; set; }
+        [JsonPropertyName("source_sheet")] public string? SourceSheet { get; set; }
+        [JsonPropertyName("source_cell")] public string? SourceCell { get; set; }
     }
 
     private sealed class AiResponse

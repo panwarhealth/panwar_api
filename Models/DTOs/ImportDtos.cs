@@ -53,7 +53,7 @@ public record ImportSourceDto(
 
 public record AlreadyImportedDto(DateTime Date, string? By);
 
-public record ImportHeadlineDto(int Match, int Change, int New, int Invalid, int UnmatchedPlacements, int TotalValues);
+public record ImportHeadlineDto(int Match, int Change, int New, int UnmatchedPlacements, int TotalValues);
 
 public record PlacementDiffDto(
     string Source,
@@ -69,6 +69,10 @@ public record PlacementDiffDto(
     bool MatchedByMemory,          // matched because the admin mapped this exact block name before
     IReadOnlyList<PlacementCandidateDto> Candidates,
     IReadOnlyList<ActualDiffDto> Rows,
+    IReadOnlyList<SkippedColumnDto> SkippedColumns,
+    // KPI targets pro-rated to the months being imported, matching what the
+    // dashboard shows when filtered to the same period. Empty for a new placement.
+    IReadOnlyDictionary<string, decimal> Targets,
     IReadOnlyList<string> Notes,    // human guidance from the file - takes priority over raw cells
     bool NeedsReview,
     IReadOnlyList<string> ReviewReasons,
@@ -94,7 +98,11 @@ public record PlacementSuggestionDto(
     double Confidence,
     IReadOnlyList<SuggestionValueDto> Values,
     IReadOnlyList<string> SendDates,           // eDM send dates the AI read from the note (ISO yyyy-MM-dd)
-    IReadOnlyList<SuggestionCellRefDto> Evidence); // cells that told the AI when/what (highlighted as proof)
+    IReadOnlyList<SuggestionCellRefDto> Evidence, // cells that told the AI when/what (highlighted as proof)
+    // Every one of this send's values is already stored on its target, at the same
+    // month with the same number. A block that fans out to several placements has no
+    // single match of its own, so this is the only way to tell it changes nothing.
+    bool AlreadySaved = false);
 
 // A cell the AI points at as justification (a note, a date row) rather than a number.
 // Verified like values: only cells the AI actually read survive.
@@ -109,14 +117,19 @@ public record SuggestionValueDto(
     string SourceSheet,
     string SourceCell);
 
-public record PlacementCandidateDto(Guid PlacementId, string Name, string Template);
+// Months is what the placement already has numbers for. Several placements can
+// share a name, template and audience (one buy per month), so the months are what
+// actually tell them apart when picking where an import's numbers go.
+public record PlacementCandidateDto(Guid PlacementId, string Name, string Template, IReadOnlyList<int> Months);
+
+public record SkippedColumnDto(string Metric, string Kind);   // "calculated" | "target" | "unknown"
 
 public record ActualDiffDto(
     string Metric,
     int Month,
     decimal NewValue,
     decimal? OldValue,
-    string Outcome,                // "match" | "change" | "new" | "invalid"
+    string Outcome,                // "match" | "change" | "new"
     string? Note);
 
 public record EducationDiffDto(

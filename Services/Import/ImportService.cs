@@ -48,7 +48,7 @@ public class ImportService : IImportService
     public async Task<ImportPreviewDto> BuildPreviewAsync(string clientSlug, ImportPreviewRequest request, Guid? userId, CancellationToken ct)
     {
         var jobId = request.JobId ?? Guid.Empty;
-        var d = await BuildDiffAsync(clientSlug, request, ct);
+        var d = await BuildDiffAsync(clientSlug, request, userId, ct);
         var placementDiffs = d.PlacementDiffs;
         var aiFailed = false;
 
@@ -69,7 +69,9 @@ public class ImportService : IImportService
                                 // Cited views come from the RAW values so the highlights show
                                 // everything the AI read; the send lines get only the values
                                 // that can actually be saved.
-                                Suggestions = FillTargetsByTopic(StorableSuggestionValues(s, d.ValidKeysByTemplateCode.GetValueOrDefault(x.Template)), x, d.Placements),
+                                Suggestions = MarkAlreadySaved(
+                                    FillTargetsByTopic(DropStaleTargets(StorableSuggestionValues(s, d.ValidKeysByTemplateCode.GetValueOrDefault(x.Template)), d.Placements), x, d.Placements, d.Doc.Year),
+                                    d.Placements, d.Doc.Year),
                                 SourceViews = MergeSourceViews(x.SourceViews, SourceViewBuilder.BuildCitedSourceViews(d.Doc, x.Source, s)),
                             }
                             : x)
@@ -81,17 +83,53 @@ public class ImportService : IImportService
         return new ImportPreviewDto(request.Year, d.Sources, d.Headline, placementDiffs, d.EducationDiffs, d.GlobalWarnings, _recon.IsEnabled, aiFailed);
     }
 
+    private static bool IsMediaCost(string? key)
+        => string.Equals(key?.Trim(), "media_cost", StringComparison.OrdinalIgnoreCase);
+
+    // Re-importing a file whose numbers are all already stored should be recognised
+    // from the numbers themselves. A fanned-out block has no single matched placement
+    // to diff against, so each send is checked against its own target instead.
+    private static List<PlacementSuggestionDto> MarkAlreadySaved(
+        List<PlacementSuggestionDto> sends, List<Placement> placements, int year)
+    {
+        var byId = placements.ToDictionary(p => p.Id);
+        return sends.Select(s =>
+        {
+            if (s.Values.Count == 0 || s.TargetPlacementId is not Guid id || !byId.TryGetValue(id, out var pl))
+                return s;
+            var stored = s.Values.All(v => pl.Actuals.Any(a =>
+                a.Year == year && a.Month == s.Month
+                && string.Equals(a.MetricKey, v.Metric, StringComparison.OrdinalIgnoreCase)
+                && a.Value == v.Value));
+            return s with { AlreadySaved = stored };
+        }).ToList();
+    }
+
+    // A cached answer keeps the placement it resolved to, so one that has since been
+    // deleted - or that belongs to another year - would be handed to the admin as a
+    // real destination and only fail at commit. Forget it and let the backstop below
+    // pick again from what exists now.
+    private static List<PlacementSuggestionDto> DropStaleTargets(List<PlacementSuggestionDto> sends, List<Placement> placements)
+    {
+        var live = placements.Select(p => p.Id).ToHashSet();
+        return sends
+            .Select(s => s.TargetPlacementId is Guid id && !live.Contains(id)
+                ? s with { TargetPlacementId = null, TargetName = null }
+                : s)
+            .ToList();
+    }
+
     // Deterministic backstop for the AI's mapping nerves: when a send has no target
     // (the AI said "nothing clearly matches" or its confidence fell below the floor),
     // rank same-template placements by name similarity against "{block} - {topic}"
     // (the house naming convention) and pre-select the winner. Runs post-cache so it
     // also repairs already-cached answers.
     private static List<PlacementSuggestionDto> FillTargetsByTopic(
-        List<PlacementSuggestionDto> sends, PlacementDiffDto x, List<Placement> placements)
+        List<PlacementSuggestionDto> sends, PlacementDiffDto x, List<Placement> placements, int year)
         => sends.Select(s =>
         {
             if (s.TargetPlacementId is not null || string.IsNullOrWhiteSpace(s.TopicLabel)) return s;
-            var proposed = Norm($"{x.ParsedName} - {s.TopicLabel}");
+            var proposed = ProposedName(x.ParsedName, s.TopicLabel);
             var topic = Norm(s.TopicLabel);
             var best = placements
                 .Where(pl => pl.Template.Code.ToString().Equals(x.Template, StringComparison.OrdinalIgnoreCase))
@@ -100,7 +138,11 @@ public class ImportService : IImportService
                     var name = Norm(pl.Name);
                     var score = NameSimilarity(proposed, name)
                         + (topic.Length >= 4 && name.Contains(topic) ? 0.15 : 0)
-                        + (!string.IsNullOrEmpty(x.Publisher) && pl.Publisher.Slug == x.Publisher ? 0.05 : 0);
+                        + (!string.IsNullOrEmpty(x.Publisher) && pl.Publisher.Slug == x.Publisher ? 0.05 : 0)
+                        // Same-named placements are usually one buy per month, so the name
+                        // alone can't separate them - without this a March send lands in
+                        // whichever one happens to sort first.
+                        + MonthFit(pl, year, new HashSet<int> { s.Month });
                     return (pl, score);
                 })
                 .OrderByDescending(t => t.score)
@@ -109,6 +151,65 @@ public class ImportService : IImportService
                 ? s with { TargetPlacementId = best.pl.Id, TargetName = best.pl.Name }
                 : s;
         }).ToList();
+
+    // The chips the admin actually sees, best first. Ordering these by name put an
+    // arbitrary alphabetical slice in front of them, so the right home could sit
+    // outside the list entirely.
+    private const int MaxCandidates = 5;
+
+    private static List<PlacementCandidateDto> RankCandidates(ParsedPlacement pp, List<Placement> pool, int year)
+    {
+        var name = Norm(pp.Name);
+        var months = pp.Actuals.Select(a => a.Month).ToHashSet();
+        return pool
+            .Select(p => (
+                P: p,
+                SameTemplate: string.Equals(p.Template.Code.ToString(), pp.Template, StringComparison.OrdinalIgnoreCase),
+                Score: NameSimilarity(name, Norm(p.Name))
+                    + (string.Equals(p.Publisher.Slug, pp.Publisher, StringComparison.OrdinalIgnoreCase) ? 0.15 : 0)
+                    + (string.Equals(p.Brand.Name, pp.Brand, StringComparison.OrdinalIgnoreCase) ? 0.10 : 0)
+                    + (pp.Audience is not null && string.Equals(p.Audience.Slug, pp.Audience, StringComparison.OrdinalIgnoreCase) ? 0.10 : 0)
+                    + MonthFit(p, year, months)))
+            // Template first, and not as a weight: a placement's template decides which
+            // metrics are storable, so a same-named placement of the wrong template would
+            // take the numbers and drop every one of them. No name match outranks that.
+            .OrderByDescending(x => x.SameTemplate)
+            .ThenByDescending(x => x.Score)
+            .ThenBy(x => x.P.Name, StringComparer.OrdinalIgnoreCase)
+            .Take(MaxCandidates)
+            .Select(x => ToCandidate(x.P, year))
+            .ToList();
+    }
+
+    // Placements here often share a name because each month's buy is its own row, so
+    // the months a placement already holds say more than its name does: one that has
+    // none is free, one that overlaps is likely the same buy, one that sits in other
+    // months entirely is a different buy.
+    private static double MonthFit(Placement p, int year, HashSet<int> months)
+    {
+        if (months.Count == 0) return 0;
+        var have = p.Actuals.Where(a => a.Year == year).Select(a => a.Month).ToHashSet();
+        if (have.Count == 0) return 0.05;
+        return have.Overlaps(months) ? 0.10 : -0.15;
+    }
+
+    private static PlacementCandidateDto ToCandidate(Placement p, int year)
+        => new(p.Id, p.Name, p.Template.Code.ToString(),
+               p.Actuals.Where(a => a.Year == year).Select(a => a.Month).Distinct().OrderBy(m => m).ToList());
+
+    // The AI falls back to the block name when a note names no topic, so joining the
+    // two blindly gives "x - x", which scores badly against the real "x". Keep
+    // whichever already contains the other.
+    private static string ProposedName(string blockName, string topic)
+    {
+        var block = Norm(blockName);
+        var t = Norm(topic);
+        if (t.Length == 0) return block;
+        if (block.Length == 0) return t;
+        if (t.Contains(block)) return t;
+        if (block.Contains(t)) return block;
+        return $"{block} - {t}";
+    }
 
     // Character-bigram Dice similarity on normalized names: "ap solus edms - msk pain"
     // vs "ap solus edm - msk pain" ~0.96, vs a different card sharing only the topic
@@ -131,17 +232,37 @@ public class ImportService : IImportService
         return 2.0 * inter / (a.Length - 1 + b.Length - 1);
     }
 
-    // The AI's cited views carry highlights, so they supersede a plain referenced-tab
-    // view of the same sheet - keeping both would show the tab twice. The block's own
-    // view (always first) stays regardless.
+    // One grid per sheet: the block's view gains the AI's highlights.
     private static List<SourceViewDto> MergeSourceViews(IReadOnlyList<SourceViewDto> existing, IReadOnlyList<SourceViewDto> cited)
     {
         if (cited.Count == 0) return existing.ToList();
-        var citedSheets = cited.Select(v => v.Sheet).ToHashSet(StringComparer.OrdinalIgnoreCase);
-        return existing.Take(1)
-            .Concat(existing.Skip(1).Where(v => !citedSheets.Contains(v.Sheet)))
-            .Concat(cited)
-            .ToList();
+
+        var citedCells = cited
+            .SelectMany(v => v.Rows.SelectMany(r => r.Cells.Where(c => c.Highlight).Select(c => (v.Sheet, Ref: $"{c.Col}{r.Row}"))))
+            .ToHashSet();
+
+        var result = new List<SourceViewDto>();
+        var covered = new HashSet<(string, string)>();
+        foreach (var view in existing)
+        {
+            var rows = view.Rows.Select(r => r with
+            {
+                Cells = r.Cells.Select(c =>
+                {
+                    if (!citedCells.Contains((view.Sheet, $"{c.Col}{r.Row}"))) return c;
+                    covered.Add((view.Sheet, $"{c.Col}{r.Row}"));
+                    return c with { Highlight = true };
+                }).ToList(),
+            }).ToList();
+            result.Add(view with { Rows = rows });
+        }
+
+        foreach (var v in cited)
+        {
+            var own = v.Rows.SelectMany(r => r.Cells.Where(c => c.Highlight).Select(c => (v.Sheet, $"{c.Col}{r.Row}")));
+            if (own.Any(cell => !covered.Contains(cell))) result.Add(v);
+        }
+        return result;
     }
 
     // Suggestion values arrive with the AI's free-text metric labels ("Total Sends"),
@@ -155,7 +276,7 @@ public class ImportService : IImportService
             var values = new List<SuggestionValueDto>();
             foreach (var v in s.Values)
             {
-                var key = Catalog.NormalizeMetric(v.Metric ?? "");
+                var key = MetricNaming.Normalize(v.Metric ?? "");
                 if (key.Length == 0 || validKeys is null || !validKeys.Contains(key) || !seen.Add(key)) continue;
                 values.Add(v with { Metric = key });
             }
@@ -178,11 +299,12 @@ public class ImportService : IImportService
     {
         var flagged = d.PlacementDiffs
             .Select((x, i) => (x, i))
-            .Where(t => t.x.NeedsReview && d.Doc.Placements[t.i].Notes.Count > 0)
+            .Where(t => t.x.NeedsReview && d.Doc.Placements[t.i].Notes.Count > 0 && !d.Doc.Placements[t.i].FromAi)
             .Select(t => t.i)
             .ToList();
         var candidates = d.Placements
-            .Select(p => new ReconCandidate(p.Id, p.Name, p.Template.Code.ToString(), p.Brand.Name, p.Publisher.Slug))
+            .Select(p => new ReconCandidate(p.Id, p.Name, p.Template.Code.ToString(), p.Brand.Name, p.Publisher.Slug,
+                p.Actuals.Where(a => a.Year == d.Doc.Year).Select(a => a.Month).Distinct().OrderBy(m => m).ToList()))
             .ToList();
         var hashByName = d.FileData
             .GroupBy(fd => fd.FileName)
@@ -190,10 +312,31 @@ public class ImportService : IImportService
         return (flagged, candidates, hashByName);
     }
 
-    private async Task<DiffResult> BuildDiffAsync(string clientSlug, ImportPreviewRequest request, CancellationToken ct)
+    private async Task<DiffResult> BuildDiffAsync(string clientSlug, ImportPreviewRequest request, Guid? userId, CancellationToken ct)
     {
         var client = await _context.Clients.FirstOrDefaultAsync(c => c.Slug == clientSlug, ct)
             ?? throw new ImportConflictException($"Client '{clientSlug}' not found");
+
+        var templates = await _context.MetricTemplates.AsNoTracking().ToListAsync(ct);
+        var templateIdByCode = templates.ToDictionary(t => t.Code.ToString(), t => t.Id, StringComparer.OrdinalIgnoreCase);
+
+        var allMetricFields = await _context.MetricFields.AsNoTracking().ToListAsync(ct);
+        var validKeysByTemplate = allMetricFields
+            .Where(mf => !mf.IsCalculated)
+            .GroupBy(mf => mf.TemplateId)
+            .ToDictionary(g => g.Key, g => new HashSet<string>(g.Select(mf => mf.Key), StringComparer.OrdinalIgnoreCase));
+        var calculatedKeysByTemplate = allMetricFields
+            .Where(mf => mf.IsCalculated)
+            .GroupBy(mf => mf.TemplateId)
+            .ToDictionary(g => g.Key, g => new HashSet<string>(g.Select(mf => mf.Key), StringComparer.OrdinalIgnoreCase));
+
+        var validKeysByTemplateCode = templates.ToDictionary(
+            t => t.Code.ToString(),
+            t => validKeysByTemplate.GetValueOrDefault(t.Id) ?? new HashSet<string>(StringComparer.OrdinalIgnoreCase),
+            StringComparer.OrdinalIgnoreCase);
+
+        var vocabulary = new MetricVocabulary(
+            validKeysByTemplateCode.ToDictionary(kv => kv.Key, kv => (IReadOnlySet<string>)kv.Value, StringComparer.OrdinalIgnoreCase));
 
         var parser = ImportParser.Default();
         var doc = new ImportDocument { ClientSlug = clientSlug, Year = request.Year };
@@ -207,35 +350,68 @@ public class ImportService : IImportService
             var bytes = await _r2.DownloadAsync(f.ObjectKey, ct);
             fileData.Add((f.FileName, f.ObjectKey, Sha256Hex(bytes)));
             using var wb = WorkbookLoader.Load(bytes);
-            parser.ParseInto(wb, new ParseContext { ClientSlug = clientSlug, Year = request.Year, FileName = f.FileName }, doc);
+            parser.ParseInto(wb, new ParseContext
+            {
+                ClientSlug = clientSlug,
+                Year = request.Year,
+                FileName = f.FileName,
+                Vocabulary = vocabulary,
+            }, doc);
+        }
+
+        if (_recon.IsEnabled)
+        {
+            var unreadFiles = doc.Sources.Select(s => s.File)
+                .Where(f => !doc.Placements.Any(p => p.Source == f)
+                            && !doc.Education.Any(e => e.Source == f)
+                            && doc.Snapshot.Any(sn => sn.File == f))
+                .ToList();
+            if (unreadFiles.Count > 0)
+            {
+                var extractHashByName = fileData
+                    .GroupBy(fd => fd.FileName)
+                    .ToDictionary(g => g.Key, g => g.First().Hash, StringComparer.Ordinal);
+                var extracted = await _recon.ExtractAsync(client.Id, doc, unreadFiles, extractHashByName, vocabulary, userId, allowLive: true, jobId, ct);
+                foreach (var (file, pls) in extracted.ByFile)
+                {
+                    if (pls.Count == 0) continue;
+                    doc.Placements.AddRange(pls);
+                    doc.Warnings.RemoveAll(w => w.Source == file && w.Message.StartsWith("No placement blocks"));
+                }
+                foreach (var f in extracted.FailedFiles)
+                    doc.Warnings.Add(new Warning { Source = f, Message = "The AI tried to work out this file's layout and hit a problem - build the preview again to retry" });
+            }
         }
 
         _progress.Report(jobId, "Comparing your file against what's already saved...");
 
-        var templates = await _context.MetricTemplates.AsNoTracking().ToListAsync(ct);
-        var templateIdByCode = templates.ToDictionary(t => t.Code.ToString(), t => t.Id, StringComparer.OrdinalIgnoreCase);
-
-        var validKeysByTemplate = (await _context.MetricFields.AsNoTracking()
-                .Where(mf => !mf.IsCalculated).ToListAsync(ct))
-            .GroupBy(mf => mf.TemplateId)
-            .ToDictionary(g => g.Key, g => new HashSet<string>(g.Select(mf => mf.Key), StringComparer.OrdinalIgnoreCase));
-
         var placements = await _context.Placements.AsNoTracking()
             .Include(p => p.Template).Include(p => p.Brand).Include(p => p.Publisher).Include(p => p.Audience)
-            .Include(p => p.Actuals)
+            .Include(p => p.Actuals).Include(p => p.Kpis)
             .Where(p => p.Brand.ClientId == client.Id)
             .ToListAsync(ct);
+
 
         var eduAssets = await _context.EducationAssets.AsNoTracking()
             .Include(a => a.Values).Include(a => a.Page)
             .Where(a => a.Page.ClientId == client.Id)
             .ToListAsync(ct);
 
-        var placementsByName = placements
+        var allPublishers = await _context.Publishers.AsNoTracking().ToListAsync(ct);
+        var clientBrands = await _context.Brands.AsNoTracking().Where(b => b.ClientId == client.Id).ToListAsync(ct);
+        var clientAudiences = await _context.Audiences.AsNoTracking().Where(a => a.ClientId == client.Id).ToListAsync(ct);
+        ImportTaxonomyResolver.Resolve(doc, allPublishers, clientBrands, clientAudiences, placements);
+
+        // Placements are year-stamped, so only this year's can receive this import's
+        // numbers. Taxonomy resolution above still reads every year on purpose - a
+        // publisher's audience doesn't change with the calendar.
+        var yearPlacements = placements.Where(p => p.Year == request.Year).ToList();
+
+        var placementsByName = yearPlacements
             .GroupBy(p => Norm(p.Name))
             .ToDictionary(g => g.Key, g => g.ToList());
         // Mappings the admin made on previous imports: block name -> placement.
-        var placementById = placements.ToDictionary(p => p.Id);
+        var placementById = yearPlacements.ToDictionary(p => p.Id);
         var aliasByName = (await _context.ImportNameAliases.AsNoTracking()
                 .Where(a => a.ClientId == client.Id).ToListAsync(ct))
             .GroupBy(a => a.SourceName)
@@ -246,16 +422,22 @@ public class ImportService : IImportService
 
         var blockLocator = SourceViewBuilder.BuildBlockLocator(doc);
 
-        var validKeysByTemplateCode = templates.ToDictionary(
-            t => t.Code.ToString(),
-            t => validKeysByTemplate.GetValueOrDefault(t.Id) ?? new HashSet<string>(StringComparer.OrdinalIgnoreCase),
-            StringComparer.OrdinalIgnoreCase);
-
         var placementDiffs = new List<PlacementDiffDto>();
         foreach (var pp in doc.Placements)
         {
             var norm = Norm(pp.Name);
             placementsByName.TryGetValue(norm, out var hits);
+            // A name can repeat across templates - the same banner reported as display
+            // in one file and as an eDM in another. Only same-template placements can
+            // hold this block's metrics, so they decide the match before it can be
+            // called ambiguous.
+            if (hits is { Count: > 1 })
+            {
+                var sameTemplate = hits
+                    .Where(h => h.Template.Code.ToString().Equals(pp.Template, StringComparison.OrdinalIgnoreCase))
+                    .ToList();
+                if (sameTemplate.Count > 0) hits = sameTemplate;
+            }
 
             string matchStatus;
             Placement? matched = null;
@@ -278,36 +460,41 @@ public class ImportService : IImportService
             else if (hits is { Count: > 1 })
             {
                 matchStatus = "ambiguous";
-                candidates = hits.Select(h => new PlacementCandidateDto(h.Id, h.Name, h.Template.Code.ToString())).ToList();
+                candidates = RankCandidates(pp, hits, request.Year);
             }
             else
             {
                 matchStatus = "unmatched";
-                candidates = placements
+                var pool = yearPlacements
                     .Where(p => string.Equals(p.Publisher.Slug, pp.Publisher, StringComparison.OrdinalIgnoreCase)
                                 || string.Equals(p.Brand.Name, pp.Brand, StringComparison.OrdinalIgnoreCase))
-                    .OrderBy(p => p.Name)
-                    .Select(p => new PlacementCandidateDto(p.Id, p.Name, p.Template.Code.ToString()))
                     .ToList();
+                candidates = RankCandidates(pp, pool, request.Year);
             }
 
             Guid? templateId = matched?.TemplateId
                 ?? (templateIdByCode.TryGetValue(pp.Template, out var tid) ? tid : null);
             var validKeys = templateId is Guid g && validKeysByTemplate.TryGetValue(g, out var vk)
                 ? vk : new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            var calculatedKeys = templateId is Guid cg && calculatedKeysByTemplate.TryGetValue(cg, out var ck)
+                ? ck : new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+            var skipped = pp.Actuals
+                .Select(a => a.Metric)
+                .Where(k => !validKeys.Contains(k))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .Select(k => new SkippedColumnDto(k, ClassifySkipped(k, calculatedKeys)))
+                .OrderBy(s => s.Metric)
+                .ToList();
 
             var rows = new List<ActualDiffDto>();
-            foreach (var a in pp.Actuals)
+            foreach (var a in pp.Actuals.Where(a => validKeys.Contains(a.Metric)))
             {
                 var key = a.Metric;
                 string outcome;
                 decimal? old = null;
 
-                if (!validKeys.Contains(key))
-                {
-                    outcome = "invalid";
-                }
-                else if (matched is not null)
+                if (matched is not null)
                 {
                     var existing = matched.Actuals.FirstOrDefault(x =>
                         x.Year == request.Year && x.Month == a.Month &&
@@ -325,9 +512,9 @@ public class ImportService : IImportService
 
             // Written for the admin reviewing the card - plain sentences, no jargon.
             var reasons = new List<string>();
+            if (pp.FromAi) reasons.Add("The AI worked out this file's layout by itself - check every number against the file view below");
             if (matchStatus == "unmatched") reasons.Add("The name doesn't match anything saved yet");
             else if (matchStatus == "ambiguous") reasons.Add("The name matches more than one saved placement");
-            if (rows.Any(r => r.Outcome == "invalid")) reasons.Add("Some of its numbers have nowhere to be saved yet (shown in red below)");
             if (rows.Any(r => r.Outcome == "change")) reasons.Add("Some numbers differ from what's already saved (shown in amber below, old value underneath)");
             if (pp.Notes.Count > 0) reasons.Add("There's a note in the file that may change where things go");
             if (doc.Warnings.Any(w => w.Message.Contains($"'{pp.Name}'") && w.Message.Contains("months sum to")))
@@ -336,11 +523,30 @@ public class ImportService : IImportService
 
             var blockViews = SourceViewBuilder.BuildBlockSourceView(blockLocator, doc, pp.Source, pp.Name);
             var referencedViews = SourceViewBuilder.BuildReferencedTabViews(doc, pp.Source, pp.Notes, blockViews.FirstOrDefault()?.Sheet);
+            var citedViews = pp.FromAi
+                ? SourceViewBuilder.BuildCitedCellViews(doc, pp.Source, pp.Actuals
+                    .Where(a => !string.IsNullOrEmpty(a.SourceSheet) && !string.IsNullOrEmpty(a.SourceCell))
+                    .Select(a => (a.SourceSheet!, a.SourceCell!))
+                    .Distinct()
+                    .ToList())
+                : Array.Empty<SourceViewDto>();
+            var citedSheets = citedViews.Select(v => v.Sheet).ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+            var targets = new Dictionary<string, decimal>(StringComparer.OrdinalIgnoreCase);
+            if (matched is not null && rows.Count > 0)
+            {
+                var fromOrd = PeriodWindow.Ord(request.Year, rows.Min(r => r.Month));
+                var toOrd = PeriodWindow.Ord(request.Year, rows.Max(r => r.Month));
+                var fraction = PeriodWindow.TargetFraction(matched, fromOrd, toOrd);
+                foreach (var k in matched.Kpis)
+                    targets[k.MetricKey] = targets.GetValueOrDefault(k.MetricKey) + k.TargetValue * fraction;
+            }
+
             placementDiffs.Add(new PlacementDiffDto(
                 pp.Source, pp.Name, pp.Brand, pp.Audience, pp.Publisher, pp.Template, pp.Objective,
-                matchStatus, matched?.Id, matched?.Name, matchedByMemory, candidates, rows,
+                matchStatus, matched?.Id, matched?.Name, matchedByMemory, candidates, rows, skipped, targets,
                 pp.Notes, needsReview, reasons, Array.Empty<PlacementSuggestionDto>(),
-                blockViews.Concat(referencedViews).ToList()));
+                citedViews.Concat(blockViews.Concat(referencedViews).Where(v => !citedSheets.Contains(v.Sheet))).ToList()));
         }
 
         var educationDiffs = new List<EducationDiffDto>();
@@ -436,11 +642,10 @@ public class ImportService : IImportService
             Match: allRowsOutcomes.Count(o => o == "match"),
             Change: allRowsOutcomes.Count(o => o == "change"),
             New: allRowsOutcomes.Count(o => o == "new"),
-            Invalid: allRowsOutcomes.Count(o => o == "invalid"),
             UnmatchedPlacements: placementDiffs.Count(p => p.MatchStatus != "matched"),
             TotalValues: allRowsOutcomes.Count);
 
-        return new DiffResult(client, doc, placementDiffs, educationDiffs, placements, fileData, sources, headline, globalWarnings, validKeysByTemplateCode);
+        return new DiffResult(client, doc, placementDiffs, educationDiffs, yearPlacements, fileData, sources, headline, globalWarnings, validKeysByTemplateCode);
     }
 
     private sealed record DiffResult(
@@ -467,11 +672,6 @@ public class ImportService : IImportService
             fileHashes.Add((f, Sha256Hex(bytes)));
         }
         var hashes = fileHashes.Select(x => x.Hash).Distinct().ToList();
-        var priorRuns = await _context.ImportRuns.AsNoTracking()
-            .Where(r => r.ClientId == client.Id && hashes.Contains(r.ContentHash))
-            .ToListAsync(ct);
-        if (priorRuns.Count > 0 && !request.Acknowledged)
-            throw new ImportConflictException("One or more of these files was already imported. Tick the acknowledge box to import again.");
 
         var validKeysByTemplate = (await _context.MetricFields.AsNoTracking()
                 .Where(mf => !mf.IsCalculated).ToListAsync(ct))
@@ -493,9 +693,26 @@ public class ImportService : IImportService
             ? new Dictionary<Guid, Placement>()
             : (await _context.Placements
                 .Include(p => p.Actuals)
-                .Where(p => matchedIds.Contains(p.Id) && p.Brand.ClientId == client.Id)
+                .Where(p => matchedIds.Contains(p.Id) && p.Brand.ClientId == client.Id && p.Year == request.Year)
                 .ToListAsync(ct))
               .ToDictionary(p => p.Id);
+
+        // Ask about the data, not the filename. Re-uploading a file you've imported
+        // before is harmless - values are upserted by year/month/metric, and a file
+        // whose numbers are unchanged writes nothing. The only thing worth stopping
+        // for is a number that is already saved and about to become a different one.
+        var overwrites = request.Placements
+            .Where(cp => cp.PlacementId is not null)
+            .SelectMany(cp => loadedPlacements.TryGetValue(cp.PlacementId!.Value, out var pl)
+                ? cp.Actuals.Where(a => pl.Actuals.Any(ex =>
+                    ex.Year == a.Year && ex.Month == a.Month
+                    && string.Equals(ex.MetricKey, a.MetricKey, StringComparison.OrdinalIgnoreCase)
+                    && ex.Value != a.Value))
+                : Enumerable.Empty<CommitActualDto>())
+            .Count();
+        if (overwrites > 0 && !request.Acknowledged)
+            throw new ImportConflictException(
+                $"This will change {overwrites} number{(overwrites == 1 ? "" : "s")} you've already saved. Tick the box to overwrite them.");
 
         foreach (var cp in request.Placements)
         {
@@ -506,7 +723,7 @@ public class ImportService : IImportService
             if (cp.PlacementId is Guid pid)
             {
                 if (!loadedPlacements.TryGetValue(pid, out placement!))
-                    throw new ImportConflictException($"Placement {pid} not found for this client");
+                    throw new ImportConflictException($"Placement {pid} is not one of this client's {request.Year} placements");
             }
             else if (cp.NewPlacement is not null)
             {
@@ -530,6 +747,17 @@ public class ImportService : IImportService
             // Store send dates whenever the note carried them - true eDMs and the
             // "eDM MREC/Leaderboard" banners (DigitalDisplay template) both have them.
             ApplySendDates(placement, cp.SendDates);
+
+            // Spend on the dashboard sums Placement.MediaCost, but a workbook reports
+            // cost per month like any other metric, so the numbers landed and spend
+            // still read zero. Only touched when this import actually carried cost -
+            // a file without a cost column leaves a hand-entered figure alone.
+            var cost = placement.Actuals
+                .Where(a => a.Year == request.Year && IsMediaCost(a.MetricKey))
+                .ToDictionary(a => a.Month, a => a.Value);
+            foreach (var a in cp.Actuals.Where(a => a.Year == request.Year && IsMediaCost(a.MetricKey)))
+                cost[a.Month] = a.Value;
+            if (cost.Count > 0) placement.MediaCost = cost.Values.Sum();
 
             var n = _placementWrite.UpsertActuals(placement,
                 cp.Actuals.Select(a => new ActualWrite(a.Year, a.Month, a.MetricKey, a.Value, a.Note)));
@@ -722,7 +950,7 @@ public class ImportService : IImportService
     {
         var brandName = spec.Brand.Trim().ToLowerInvariant();
         // Match in memory (a client has only a handful of brands): exact first, then
-        // containment for compound names like "Nurofen Adult" -> "Nurofen".
+        // containment, so a compound name in the file resolves to its parent brand.
         var clientBrands = await _context.Brands.Where(b => b.ClientId == clientId).ToListAsync(ct);
         var brand = clientBrands.FirstOrDefault(b => string.Equals(b.Name, spec.Brand.Trim(), StringComparison.OrdinalIgnoreCase))
             ?? clientBrands.FirstOrDefault(b =>
@@ -794,6 +1022,12 @@ public class ImportService : IImportService
 
         return placement;
     }
+
+    private static string ClassifySkipped(string metricKey, IReadOnlySet<string> calculatedKeys)
+        => calculatedKeys.Contains(metricKey) ? "calculated"
+            : metricKey.Contains("kpi", StringComparison.OrdinalIgnoreCase)
+              || metricKey.Contains("target", StringComparison.OrdinalIgnoreCase) ? "target"
+            : "unknown";
 
     private static string Sha256Hex(byte[] bytes) => Convert.ToHexString(SHA256.HashData(bytes)).ToLowerInvariant();
 

@@ -106,23 +106,6 @@ internal static class Spreadsheet
     public static bool LooksLikeMetricLabel(string? s)
         => s is not null && MetricMarkers.Any(m => s.Contains(m, StringComparison.OrdinalIgnoreCase));
 
-    public static string? ResolvePublisher(string name)
-    {
-        var u = name.ToUpperInvariant();
-        if (u.StartsWith("AJP")) return "ajp";
-        if (u.StartsWith("AP ") || u.StartsWith("AP-") || u == "AP") return "ap";
-        if (u.StartsWith("ARTERIAL")) return "arterial";
-        if (u.StartsWith("HEALTHED")) return "healthed";
-        if (u.StartsWith("AJGP") || u.StartsWith("RACGP")) return "ajgp";
-        if (u.StartsWith("ADG")) return "adg";
-        if (u.StartsWith("PRINCETON")) return "princeton";
-        if (u.StartsWith("RESEARCH REVIEW")) return "research-review";
-        if (u.StartsWith("NEWSGP")) return "newsgp";
-        if (u.StartsWith("MT ") || u.StartsWith("MEDICAL TODAY") || u.StartsWith("MEDICINE TODAY")) return "medicine-today";
-        if (u.StartsWith("PRAXHUB")) return "praxhub";
-        return null;
-    }
-
     public static string InferObjective(string name)
     {
         var l = name.ToLowerInvariant();
