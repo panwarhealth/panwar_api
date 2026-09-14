@@ -240,8 +240,7 @@ public class ClientSummaryService : IClientSummaryService
                     Metrics: WindowMetrics(list),
                     TargetMetrics: Targets(list));
             })
-            .OrderByDescending(r => r.MediaCost)
-            .ThenBy(r => r.Label)
+            .OrderBy(r => CategoryRank(r.Label))
             .ToList();
 
         var byDigitalFormat = placements
@@ -262,7 +261,7 @@ public class ClientSummaryService : IClientSummaryService
                     Metrics: WindowMetrics(list),
                     TargetMetrics: Targets(list));
             })
-            .OrderByDescending(r => r.MediaCost)
+            .OrderBy(r => DigitalFormatRank(r.Label))
             .ThenBy(r => r.Label)
             .ToList();
 
@@ -439,15 +438,31 @@ public class ClientSummaryService : IClientSummaryService
     private static string MediaTypeOf(MetricTemplateCode code, EdmSubcategory? edm) =>
         DigitalFormatOf(code, edm) ?? CategoryOf(code);
 
+    private static readonly string[] DigitalFormatOrder =
+        { "Digital Display", "Solus eDM", "Sponsored eDM Tile", "Sponsored Article" };
+
+    private static int DigitalFormatRank(string label)
+    {
+        var i = Array.IndexOf(DigitalFormatOrder, label);
+        return i < 0 ? DigitalFormatOrder.Length : i;
+    }
+
+    private static int CategoryRank(string label) => label switch
+    {
+        "Print" => 0,
+        "Digital" => 1,
+        _ => 2,
+    };
+
     private static string? DigitalFormatOf(MetricTemplateCode code, EdmSubcategory? edm) => code switch
     {
         MetricTemplateCode.DigitalDisplay => "Digital Display",
-        MetricTemplateCode.SponsoredContent => "Spon Con",
+        MetricTemplateCode.SponsoredContent => "Sponsored Article",
         MetricTemplateCode.Edm => edm switch
         {
-            EdmSubcategory.Solus => "eDM Solus",
-            EdmSubcategory.SponsoredContent => "eDM Spon Con",
-            EdmSubcategory.Banner => "eDM Banners",
+            EdmSubcategory.Solus => "Solus eDM",
+            EdmSubcategory.SponsoredContent => "Sponsored eDM Tile",
+            EdmSubcategory.Banner => "eDM Banner",
             _ => "eDM",
         },
         _ => null,
