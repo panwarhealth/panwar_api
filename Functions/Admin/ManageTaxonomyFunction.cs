@@ -42,9 +42,10 @@ public class ManageTaxonomyFunction
         var brands = await _context.Brands
             .AsNoTracking()
             .Where(b => b.ClientId == client.Id)
-            .OrderBy(b => b.Name)
+            .OrderBy(b => b.SortOrder)
+            .ThenBy(b => b.Name)
             .Select(b => new BrandDto(
-                b.Id, b.Name, b.Slug, b.Color,
+                b.Id, b.Name, b.Slug, b.Color, b.SortOrder,
                 _context.Placements.Count(p => p.BrandId == b.Id)))
             .ToListAsync(ct);
 
@@ -86,6 +87,7 @@ public class ManageTaxonomyFunction
             Name = name,
             Slug = slug,
             Color = color.value,
+            SortOrder = data.SortOrder ?? 0,
             CreatedAt = DateTime.UtcNow,
             UpdatedAt = DateTime.UtcNow,
         };
@@ -93,7 +95,7 @@ public class ManageTaxonomyFunction
         await _context.SaveChangesAsync(ct);
 
         var resp = req.CreateResponse(HttpStatusCode.Created);
-        await resp.WriteAsJsonAsync(new BrandDto(brand.Id, brand.Name, brand.Slug, brand.Color, 0));
+        await resp.WriteAsJsonAsync(new BrandDto(brand.Id, brand.Name, brand.Slug, brand.Color, brand.SortOrder, 0));
         return resp;
     }
 
@@ -133,6 +135,7 @@ public class ManageTaxonomyFunction
             brand.Color = color.value;
         }
 
+        if (data.SortOrder.HasValue) brand.SortOrder = data.SortOrder.Value;
         brand.Name = name;
         brand.Slug = slug;
         brand.UpdatedAt = DateTime.UtcNow;
@@ -140,7 +143,7 @@ public class ManageTaxonomyFunction
 
         var placementCount = await _context.Placements.CountAsync(p => p.BrandId == brand.Id, ct);
         var resp = req.CreateResponse(HttpStatusCode.OK);
-        await resp.WriteAsJsonAsync(new BrandDto(brand.Id, brand.Name, brand.Slug, brand.Color, placementCount));
+        await resp.WriteAsJsonAsync(new BrandDto(brand.Id, brand.Name, brand.Slug, brand.Color, brand.SortOrder, placementCount));
         return resp;
     }
 

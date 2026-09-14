@@ -13,5 +13,6 @@ public interface IClientSummaryService
         string? from,
         string? to,
         string? brandSlug,
+        string? audienceSlug,
         CancellationToken cancellationToken);
 }

@@ -22,6 +22,7 @@ public class ClientSummaryService : IClientSummaryService
         string? from,
         string? to,
         string? brandSlug,
+        string? audienceSlug,
         CancellationToken cancellationToken)
     {
         var client = await _context.Clients.AsNoTracking()
@@ -105,11 +106,14 @@ public class ClientSummaryService : IClientSummaryService
 
         if (!string.IsNullOrWhiteSpace(brandSlug))
             placements = placements.Where(p => p.Brand.Slug == brandSlug).ToList();
+        if (!string.IsNullOrWhiteSpace(audienceSlug))
+            placements = placements.Where(p => p.Audience.Slug == audienceSlug).ToList();
 
         int fromYear = fromOrd / 12, toYear = toOrd / 12;
         var cpdInvestments = await _context.CpdInvestments.AsNoTracking()
             .Where(c => c.Brand.ClientId == clientId && c.Year >= fromYear && c.Year <= toYear)
             .Where(c => string.IsNullOrWhiteSpace(brandSlug) || c.Brand.Slug == brandSlug)
+            .Where(c => string.IsNullOrWhiteSpace(audienceSlug) || c.Audience.Slug == audienceSlug)
             .ToListAsync(cancellationToken);
         var cpdTotal = cpdInvestments.Sum(c => c.Cost);
         var cpdByBrandAudience = cpdInvestments
@@ -245,7 +249,8 @@ public class ClientSummaryService : IClientSummaryService
         var brands = placements
             .Select(p => p.Brand)
             .DistinctBy(b => b.Id)
-            .OrderBy(b => b.Name)
+            .OrderBy(b => b.SortOrder)
+            .ThenBy(b => b.Name)
             .Select(b => new BrandRefDto(b.Slug, b.Name, b.Color))
             .ToList();
 

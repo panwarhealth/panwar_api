@@ -59,7 +59,8 @@ public class GetClientBrandsFunction
             var brandRows = await _context.Brands
                 .AsNoTracking()
                 .Where(b => b.ClientId == client.Id)
-                .OrderBy(b => b.Name)
+                .OrderBy(b => b.SortOrder)
+                .ThenBy(b => b.Name)
                 .Select(b => new { b.Id, b.Name, b.Slug, b.Color })
                 .ToListAsync(ct);
 
