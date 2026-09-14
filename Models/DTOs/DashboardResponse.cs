@@ -66,13 +66,23 @@ public sealed record DashboardPublisherDto(
 /// For eDMs that were duplicated across multiple sends, this is the merged card:
 /// summed actuals/targets and the list of in-window send dates.
 /// </summary>
+public sealed record PlacementMonthDto(
+    int Year,
+    int Month,
+    IReadOnlyDictionary<string, decimal> Metrics,
+    IReadOnlyDictionary<string, decimal> TargetMetrics);
+
 public sealed record DashboardPlacementDto(
     Guid Id,
     string Name,
     string Objective,
     string TemplateCode,
+    string MediaType,
     string PublisherName,
     string PublisherSlug,
+    string AudienceName,
+    string AudienceSlug,
+    string? OsCode,
     bool IsBonus,
     decimal MediaCost,
     decimal? PlannedMediaCost,
@@ -91,4 +101,5 @@ public sealed record DashboardPlacementDto(
     /// <summary>In-window send dates for a merged eDM group ("YYYY-MM-DD"), sorted; empty otherwise.</summary>
     IReadOnlyList<string> SendDates,
     /// <summary>Analyst's findings/commentary for this placement (the workbook's per-placement comments); null when none.</summary>
-    string? Comments);
+    string? Comments,
+    IReadOnlyList<PlacementMonthDto> Months);

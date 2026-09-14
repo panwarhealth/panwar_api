@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Panwar.Api.Data;
+using Panwar.Api.Infrastructure.CloudflareR2;
 using Panwar.Api.Models;
 using Panwar.Api.Models.DTOs;
 using Panwar.Api.Models.Enums;
@@ -11,10 +12,12 @@ public class ClientSummaryService : IClientSummaryService
     private const int FallbackYear = 2025;
 
     private readonly AppDbContext _context;
+    private readonly ICloudflareR2Service _r2;
 
-    public ClientSummaryService(AppDbContext context)
+    public ClientSummaryService(AppDbContext context, ICloudflareR2Service r2)
     {
         _context = context;
+        _r2 = r2;
     }
 
     public async Task<ClientSummaryResponse?> GetSummaryAsync(
@@ -34,7 +37,7 @@ public class ClientSummaryService : IClientSummaryService
             .Include(p => p.Brand)
             .Include(p => p.Audience)
             .Include(p => p.Publisher)
-            .Include(p => p.Template)
+            .Include(p => p.Template).ThenInclude(t => t.Fields)
             .Include(p => p.Kpis)
             .Include(p => p.Actuals)
             .Where(p => p.Brand.ClientId == clientId)
@@ -184,24 +187,41 @@ public class ClientSummaryService : IClientSummaryService
             .OrderBy(r => r.Label)
             .ToList();
 
+        var audienceRank = placements
+            .GroupBy(p => p.AudienceId)
+            .OrderByDescending(g => g.Count())
+            .ThenBy(g => g.First().Audience.Name)
+            .Select((g, i) => (g.Key, i))
+            .ToDictionary(x => x.Key, x => x.i);
+
         var byPublisher = placements
             .GroupBy(p => p.PublisherId)
             .Select(g =>
             {
                 var list = g.ToList();
-                return new SummaryRowDto(
-                    Label: g.First().Publisher.Name,
-                    BrandSlug: null,
-                    AudienceSlug: null,
-                    PlacementCount: list.Count,
-                    MediaCost: Costing(list).Sum(p => p.MediaCost),
-                    PlannedMediaCost: PlannedSum(list),
-                    CpdInvestmentCost: cpdByPublisher.GetValueOrDefault(g.Key, 0m),
-                    Metrics: WindowMetrics(list),
-                    TargetMetrics: Targets(list));
+                var dominantAudience = list
+                    .GroupBy(p => p.AudienceId)
+                    .OrderByDescending(a => a.Count())
+                    .ThenBy(a => audienceRank[a.Key])
+                    .First().Key;
+                return new
+                {
+                    AudienceOrder = audienceRank[dominantAudience],
+                    Row = new SummaryRowDto(
+                        Label: g.First().Publisher.Name,
+                        BrandSlug: null,
+                        AudienceSlug: null,
+                        PlacementCount: list.Count,
+                        MediaCost: Costing(list).Sum(p => p.MediaCost),
+                        PlannedMediaCost: PlannedSum(list),
+                        CpdInvestmentCost: cpdByPublisher.GetValueOrDefault(g.Key, 0m),
+                        Metrics: WindowMetrics(list),
+                        TargetMetrics: Targets(list)),
+                };
             })
-            .OrderByDescending(r => r.MediaCost)
-            .ThenBy(r => r.Label)
+            .OrderBy(x => x.AudienceOrder)
+            .ThenBy(x => x.Row.Label)
+            .Select(x => x.Row)
             .ToList();
 
         var byCategory = placements
@@ -280,38 +300,109 @@ public class ClientSummaryService : IClientSummaryService
 
         var isPlan = totals.Metrics.Count == 0;
 
-        var monthlyByBrand = new List<BrandMonthlyDto>();
-        if (client.ShowBrandMonthlyChart && !isPlan)
+        var placementDtos = new List<DashboardPlacementDto>();
+        if (!string.IsNullOrWhiteSpace(brandSlug))
         {
-            monthlyByBrand = placements
-                .GroupBy(p => p.BrandId)
-                .Select(g => new
+            async Task<DashboardPlacementDto> BuildCard(Placement rep, List<Placement> members)
+            {
+                var cardTotals = new Dictionary<string, decimal>();
+                foreach (var a in members.SelectMany(m => m.Actuals).Where(InWindow)) Add(cardTotals, a.MetricKey, a.Value);
+                string? artworkViewUrl = string.IsNullOrWhiteSpace(rep.ArtworkUrl)
+                    ? null
+                    : await _r2.GenerateDownloadUrlAsync(rep.ArtworkUrl, cancellationToken);
+
+                var metricKeys = rep.Template.Fields
+                    .Where(f => !f.IsCalculated)
+                    .OrderBy(f => f.SortOrder)
+                    .Select(f => f.Key)
+                    .ToArray();
+
+                string? subcategory = rep.Template.Code switch
                 {
-                    g.First().Brand,
-                    Months = (IReadOnlyList<BrandMonthlyPointDto>)g
-                        .SelectMany(p => p.Actuals.Where(InWindow)
-                            .Select(a => new { Actual = a, Category = CategoryOf(p.Template.Code) }))
-                        .GroupBy(x => (x.Actual.Year, x.Actual.Month))
-                        .OrderBy(m => PeriodWindow.Ord(m.Key.Year, m.Key.Month))
-                        .Select(m =>
-                        {
-                            var all = new Dictionary<string, decimal>();
-                            var digital = new Dictionary<string, decimal>();
-                            var print = new Dictionary<string, decimal>();
-                            foreach (var x in m)
-                            {
-                                Add(all, x.Actual.MetricKey, x.Actual.Value);
-                                if (x.Category == "Digital") Add(digital, x.Actual.MetricKey, x.Actual.Value);
-                                else if (x.Category == "Print") Add(print, x.Actual.MetricKey, x.Actual.Value);
-                            }
-                            return new BrandMonthlyPointDto(m.Key.Year, m.Key.Month, all, digital, print);
-                        })
-                        .ToList(),
-                })
-                .Where(b => b.Months.Count > 0)
-                .OrderBy(b => b.Brand.Name)
-                .Select(b => new BrandMonthlyDto(b.Brand.Name, b.Brand.Slug, b.Months))
+                    MetricTemplateCode.Edm when rep.EdmSubcategory is { } e => PlacementEnumNames.ToName(e),
+                    MetricTemplateCode.Education when rep.EducationSubcategory is { } ed => PlacementEnumNames.ToName(ed),
+                    _ => null,
+                };
+
+                var sendDates = members
+                    .SelectMany(m => m.SendDates.Length > 0
+                        ? m.SendDates
+                        : (m.StartDate is { } s ? new[] { s } : Array.Empty<DateOnly>()))
+                    .Where(d => PeriodWindow.Ord(d) >= fromOrd && PeriodWindow.Ord(d) <= toOrd)
+                    .Distinct()
+                    .OrderBy(d => d)
+                    .Select(d => d.ToString("yyyy-MM-dd"))
+                    .ToList();
+
+                var months = new List<PlacementMonthDto>();
+                for (var ord = fromOrd; ord <= toOrd; ord++)
+                {
+                    var year = ord / 12;
+                    var month = ord % 12 + 1;
+                    var metrics = new Dictionary<string, decimal>();
+                    foreach (var a in members.SelectMany(m => m.Actuals).Where(a => a.Year == year && a.Month == month))
+                        Add(metrics, a.MetricKey, a.Value);
+                    var targets = new Dictionary<string, decimal>();
+                    foreach (var m in members)
+                    {
+                        var fraction = PeriodWindow.TargetFraction(m, ord, ord);
+                        if (fraction <= 0) continue;
+                        foreach (var k in m.Kpis) Add(targets, k.MetricKey, k.TargetValue * fraction);
+                    }
+                    if (metrics.Count == 0 && targets.Count == 0) continue;
+                    months.Add(new PlacementMonthDto(year, month, metrics, targets));
+                }
+
+                return new DashboardPlacementDto(
+                    Id: rep.GroupId ?? rep.Id,
+                    Name: rep.Name,
+                    Objective: rep.Objective.ToString().ToLowerInvariant(),
+                    TemplateCode: PlacementEnumNames.ToName(rep.Template.Code),
+                    MediaType: MediaTypeOf(rep.Template.Code, rep.EdmSubcategory),
+                    PublisherName: rep.Publisher.Name,
+                    PublisherSlug: rep.Publisher.Slug,
+                    AudienceName: rep.Audience.Name,
+                    AudienceSlug: rep.Audience.Slug,
+                    OsCode: rep.OsCode,
+                    IsBonus: rep.IsBonus,
+                    MediaCost: Costing(members).Sum(m => m.MediaCost),
+                    PlannedMediaCost: PlannedSum(members),
+                    ArtworkViewUrl: artworkViewUrl,
+                    LiveMonths: rep.LiveMonths,
+                    MetricKeys: metricKeys,
+                    Totals: cardTotals,
+                    Targets: Targets(members),
+                    StartDate: rep.StartDate?.ToString("yyyy-MM-dd"),
+                    EndDate: rep.EndDate?.ToString("yyyy-MM-dd"),
+                    Subcategory: subcategory,
+                    SendDates: sendDates,
+                    Comments: rep.Comments,
+                    Months: months);
+            }
+
+            var ordered = placements
+                .OrderBy(p => p.Audience.Name)
+                .ThenByDescending(p => p.MediaCost)
+                .ThenBy(p => p.Name)
                 .ToList();
+            var mergedGroups = new HashSet<Guid>();
+            foreach (var p in ordered)
+            {
+                if (p.GroupId.HasValue && p.Template.Code == MetricTemplateCode.Edm)
+                {
+                    var key = p.GroupId.Value;
+                    if (!mergedGroups.Add(key)) continue;
+                    var members = ordered
+                        .Where(m => m.GroupId == key && m.Template.Code == MetricTemplateCode.Edm)
+                        .OrderBy(m => m.StartDate ?? DateOnly.MaxValue)
+                        .ToList();
+                    placementDtos.Add(await BuildCard(members[0], members));
+                }
+                else
+                {
+                    placementDtos.Add(await BuildCard(p, new List<Placement> { p }));
+                }
+            }
         }
 
         var summaryYear = toOrd / 12;
@@ -334,8 +425,8 @@ public class ClientSummaryService : IClientSummaryService
             Summary: summary,
             ShowBrandMonthlyChart: client.ShowBrandMonthlyChart,
             ShowPublisherChart: client.ShowPublisherChart,
-            MonthlyByBrand: monthlyByBrand,
-            ByAsset: byAsset);
+            ByAsset: byAsset,
+            Placements: placementDtos);
     }
 
     private static string CategoryOf(MetricTemplateCode code) => code switch
@@ -344,6 +435,9 @@ public class ClientSummaryService : IClientSummaryService
         MetricTemplateCode.Education => "Education",
         _ => "Digital",
     };
+
+    private static string MediaTypeOf(MetricTemplateCode code, EdmSubcategory? edm) =>
+        DigitalFormatOf(code, edm) ?? CategoryOf(code);
 
     private static string? DigitalFormatOf(MetricTemplateCode code, EdmSubcategory? edm) => code switch
     {

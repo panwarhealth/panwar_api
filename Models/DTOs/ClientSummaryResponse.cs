@@ -29,26 +29,15 @@ public sealed record ClientSummaryResponse(
     bool ShowBrandMonthlyChart,
     /// <summary>Per-client toggle: render the touchpoints-vs-engagements-by-publisher chart.</summary>
     bool ShowPublisherChart,
-    /// <summary>Monthly in-window metrics per brand for the brand chart; empty when disabled or planning.</summary>
-    IReadOnlyList<BrandMonthlyDto> MonthlyByBrand,
     /// <summary>Every placement as its own row (the workbook's FY25 Summary by Asset), grouped client-side by brand.</summary>
-    IReadOnlyList<AssetRowDto> ByAsset);
+    IReadOnlyList<AssetRowDto> ByAsset,
+    IReadOnlyList<DashboardPlacementDto> Placements);
 
 public sealed record YearSummaryDto(int Year, string Text);
 
 /// <summary>One brand's in-window monthly metric series (for the overview brand chart).</summary>
-public sealed record BrandMonthlyDto(
-    string Label,
-    string BrandSlug,
-    IReadOnlyList<BrandMonthlyPointDto> Months);
 
 /// <summary>One month's per-brand metrics, split so the client can toggle Digital / Print / All. Metrics = all categories.</summary>
-public sealed record BrandMonthlyPointDto(
-    int Year,
-    int Month,
-    IReadOnlyDictionary<string, decimal> Metrics,
-    IReadOnlyDictionary<string, decimal> DigitalMetrics,
-    IReadOnlyDictionary<string, decimal> PrintMetrics);
 
 public sealed record ClientSummaryClientDto(Guid Id, string Name, string Slug);
 

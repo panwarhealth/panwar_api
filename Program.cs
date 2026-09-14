@@ -74,7 +74,6 @@ var host = new HostBuilder()
 
         services.AddScoped<ICloudflareR2Service, CloudflareR2Service>();
 
-        services.AddScoped<IDashboardService, DashboardService>();
         services.AddScoped<IClientSummaryService, ClientSummaryService>();
         services.AddScoped<IEducationService, EducationService>();
 
