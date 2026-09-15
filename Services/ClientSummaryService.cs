@@ -82,12 +82,10 @@ public class ClientSummaryService : IClientSummaryService
             {
                 ValMin = p.Assets.SelectMany(a => a.Values).Min(v => (int?)v.Year),
                 ValMax = p.Assets.SelectMany(a => a.Values).Max(v => (int?)v.Year),
-                PtMin = p.Charts.SelectMany(c => c.Series).SelectMany(s => s.DataPoints).Min(d => (int?)d.Year),
-                PtMax = p.Charts.SelectMany(c => c.Series).SelectMany(s => s.DataPoints).Max(d => (int?)d.Year),
             })
             .ToListAsync(cancellationToken);
         var eduYears = eduSpans
-            .SelectMany(s => new[] { s.ValMin, s.ValMax, s.PtMin, s.PtMax })
+            .SelectMany(s => new[] { s.ValMin, s.ValMax })
             .Where(y => y.HasValue)
             .Select(y => y!.Value)
             .ToList();

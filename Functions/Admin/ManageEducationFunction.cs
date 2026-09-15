@@ -49,9 +49,7 @@ public class ManageEducationFunction
             .AsNoTracking()
             .Where(p => p.ClientId == client.Id)
             .OrderBy(p => p.SortOrder).ThenBy(p => p.Name)
-            // Admin picker doesn't need the overview aggregates - pass 0s
-            // (optional defaults aren't allowed inside an EF expression tree).
-            .Select(p => new EducationPageSummaryDto(p.Id, p.Name, p.Slug, p.SortOrder, p.Charts.Count, 0, 0, 0))
+            .Select(p => new EducationPageSummaryDto(p.Id, p.Name, p.Slug, p.SortOrder, p.Charts.Count, p.Assets.Count, 0))
             .ToListAsync(ct);
 
         return await Ok(req, new EducationPagesResponse(pages));
@@ -174,6 +172,7 @@ public class ManageEducationFunction
             Title = data.Title.Trim(),
             Subtitle = Clean(data.Subtitle),
             SortOrder = data.SortOrder ?? maxOrder + 1,
+            GroupLabels = CleanGroups(data.GroupLabels),
         };
         _context.EducationCharts.Add(chart);
         await _context.SaveChangesAsync(ct);
@@ -200,6 +199,7 @@ public class ManageEducationFunction
         if (!string.IsNullOrWhiteSpace(data.Title)) chart.Title = data.Title.Trim();
         if (data.Subtitle is not null) chart.Subtitle = Clean(data.Subtitle);
         if (data.SortOrder.HasValue) chart.SortOrder = data.SortOrder.Value;
+        if (data.GroupLabels is not null) chart.GroupLabels = CleanGroups(data.GroupLabels);
         chart.UpdatedAt = DateTime.UtcNow;
         await _context.SaveChangesAsync(ct);
         return await Ok(req, (await LoadTree(chart.EducationPageId, client.Id, ct))!);
@@ -224,125 +224,6 @@ public class ManageEducationFunction
         return req.CreateResponse(HttpStatusCode.NoContent);
     }
 
-    // ── Series ───────────────────────────────────────────────────────────────
-
-    [Function("ManageCreateEducationSeries")]
-    public async Task<HttpResponseData> CreateSeries(
-        [HttpTrigger(AuthorizationLevel.Anonymous, "post", Route = "manage/clients/{clientSlug}/education/charts/{chartId}/series")] HttpRequestData req,
-        FunctionContext context, string clientSlug, string chartId)
-    {
-        if (!CanManage(req, context)) return await req.CreateForbiddenResponseAsync();
-        if (!Guid.TryParse(chartId, out var cid)) return await BadRequest(req, "Invalid chart id");
-        var ct = context.CancellationToken;
-        var client = await _context.Clients.FirstOrDefaultAsync(c => c.Slug == clientSlug, ct);
-        if (client is null) return await NotFound(req);
-
-        var chart = await _context.EducationCharts
-            .FirstOrDefaultAsync(c => c.Id == cid && c.Page.ClientId == client.Id, ct);
-        if (chart is null) return await NotFound(req);
-
-        var data = await ReadJson<EducationSeriesWriteRequest>(req);
-        if (data is null || string.IsNullOrWhiteSpace(data.Label)) return await BadRequest(req, "Series label required");
-
-        var maxOrder = await _context.EducationSeries.Where(s => s.EducationChartId == cid)
-            .Select(s => (int?)s.SortOrder).MaxAsync(ct) ?? -1;
-        var series = new EducationSeries
-        {
-            Id = Guid.NewGuid(),
-            EducationChartId = cid,
-            Label = data.Label.Trim(),
-            Color = Clean(data.Color),
-            SortOrder = data.SortOrder ?? maxOrder + 1,
-        };
-        _context.EducationSeries.Add(series);
-        await _context.SaveChangesAsync(ct);
-        return await Ok(req, (await LoadTree(chart.EducationPageId, client.Id, ct))!, HttpStatusCode.Created);
-    }
-
-    [Function("ManageUpdateEducationSeries")]
-    public async Task<HttpResponseData> UpdateSeries(
-        [HttpTrigger(AuthorizationLevel.Anonymous, "patch", Route = "manage/clients/{clientSlug}/education/series/{seriesId}")] HttpRequestData req,
-        FunctionContext context, string clientSlug, string seriesId)
-    {
-        if (!CanManage(req, context)) return await req.CreateForbiddenResponseAsync();
-        if (!Guid.TryParse(seriesId, out var sid)) return await BadRequest(req, "Invalid series id");
-        var ct = context.CancellationToken;
-        var client = await _context.Clients.FirstOrDefaultAsync(c => c.Slug == clientSlug, ct);
-        if (client is null) return await NotFound(req);
-
-        var series = await _context.EducationSeries
-            .FirstOrDefaultAsync(s => s.Id == sid && s.Chart.Page.ClientId == client.Id, ct);
-        if (series is null) return await NotFound(req);
-
-        var data = await ReadJson<EducationSeriesWriteRequest>(req);
-        if (data is null) return await BadRequest(req, "Request body required");
-        if (!string.IsNullOrWhiteSpace(data.Label)) series.Label = data.Label.Trim();
-        if (data.Color is not null) series.Color = Clean(data.Color);
-        if (data.SortOrder.HasValue) series.SortOrder = data.SortOrder.Value;
-        await _context.SaveChangesAsync(ct);
-        return await Ok(req, (await LoadTree(series.EducationChartId, client.Id, ct, byChart: true))!);
-    }
-
-    [Function("ManageDeleteEducationSeries")]
-    public async Task<HttpResponseData> DeleteSeries(
-        [HttpTrigger(AuthorizationLevel.Anonymous, "delete", Route = "manage/clients/{clientSlug}/education/series/{seriesId}")] HttpRequestData req,
-        FunctionContext context, string clientSlug, string seriesId)
-    {
-        if (!CanManage(req, context)) return await req.CreateForbiddenResponseAsync();
-        if (!Guid.TryParse(seriesId, out var sid)) return await BadRequest(req, "Invalid series id");
-        var ct = context.CancellationToken;
-        var client = await _context.Clients.FirstOrDefaultAsync(c => c.Slug == clientSlug, ct);
-        if (client is null) return await NotFound(req);
-
-        var series = await _context.EducationSeries
-            .FirstOrDefaultAsync(s => s.Id == sid && s.Chart.Page.ClientId == client.Id, ct);
-        if (series is null) return await NotFound(req);
-        _context.EducationSeries.Remove(series);
-        await _context.SaveChangesAsync(ct);
-        return req.CreateResponse(HttpStatusCode.NoContent);
-    }
-
-    [Function("ManageSetEducationSeriesData")]
-    public async Task<HttpResponseData> SetSeriesData(
-        [HttpTrigger(AuthorizationLevel.Anonymous, "put", Route = "manage/clients/{clientSlug}/education/series/{seriesId}/data")] HttpRequestData req,
-        FunctionContext context, string clientSlug, string seriesId)
-    {
-        if (!CanManage(req, context)) return await req.CreateForbiddenResponseAsync();
-        if (!Guid.TryParse(seriesId, out var sid)) return await BadRequest(req, "Invalid series id");
-        var ct = context.CancellationToken;
-        var client = await _context.Clients.FirstOrDefaultAsync(c => c.Slug == clientSlug, ct);
-        if (client is null) return await NotFound(req);
-
-        var series = await _context.EducationSeries
-            .Include(s => s.DataPoints)
-            .FirstOrDefaultAsync(s => s.Id == sid && s.Chart.Page.ClientId == client.Id, ct);
-        if (series is null) return await NotFound(req);
-
-        var data = await ReadJson<EducationSeriesDataRequest>(req);
-        if (data is null) return await BadRequest(req, "Request body required");
-
-        // Collapse to one value per (year, month); last write wins.
-        var byMonth = new Dictionary<(int, int), decimal>();
-        foreach (var p in data.Points)
-        {
-            if (p.Month is < 1 or > 12) return await BadRequest(req, $"Invalid month {p.Month}");
-            byMonth[(p.Year, p.Month)] = p.Value;
-        }
-
-        // Full replace of this series' points.
-        _context.EducationDataPoints.RemoveRange(series.DataPoints);
-        _context.EducationDataPoints.AddRange(byMonth.Select(kv => new EducationDataPoint
-        {
-            Id = Guid.NewGuid(),
-            EducationSeriesId = sid,
-            Year = kv.Key.Item1,
-            Month = kv.Key.Item2,
-            Value = kv.Value,
-        }));
-        await _context.SaveChangesAsync(ct);
-        return await Ok(req, (await LoadTree(series.EducationChartId, client.Id, ct, byChart: true))!);
-    }
-
     // ── Annotations ──────────────────────────────────────────────────────────
 
     [Function("ManageCreateEducationAnnotation")]
@@ -364,16 +245,13 @@ public class ManageEducationFunction
         if (data is null || string.IsNullOrWhiteSpace(data.Text)) return await BadRequest(req, "Annotation text required");
         if (data.Month is < 1 or > 12) return await BadRequest(req, "Invalid month");
 
-        // The annotated bar's series must belong to this chart.
-        var seriesOk = await _context.EducationSeries
-            .AnyAsync(s => s.Id == data.SeriesId && s.EducationChartId == cid, ct);
-        if (!seriesOk) return await BadRequest(req, "Series does not belong to this chart");
+        if (string.IsNullOrWhiteSpace(data.Brand)) return await BadRequest(req, "Brand required");
 
         var annotation = new EducationAnnotation
         {
             Id = Guid.NewGuid(),
             EducationChartId = cid,
-            EducationSeriesId = data.SeriesId,
+            Brand = data.Brand.Trim(),
             Year = data.Year,
             Month = data.Month,
             Text = data.Text.Trim(),
@@ -404,13 +282,7 @@ public class ManageEducationFunction
         if (!string.IsNullOrWhiteSpace(data.Text)) annotation.Text = data.Text.Trim();
         if (data.Month is >= 1 and <= 12) annotation.Month = data.Month;
         if (data.Year > 0) annotation.Year = data.Year;
-        if (data.SeriesId != Guid.Empty)
-        {
-            var seriesOk = await _context.EducationSeries
-                .AnyAsync(s => s.Id == data.SeriesId && s.EducationChartId == annotation.EducationChartId, ct);
-            if (!seriesOk) return await BadRequest(req, "Series does not belong to this chart");
-            annotation.EducationSeriesId = data.SeriesId;
-        }
+        if (!string.IsNullOrWhiteSpace(data.Brand)) annotation.Brand = data.Brand.Trim();
         annotation.UpdatedAt = DateTime.UtcNow;
         await _context.SaveChangesAsync(ct);
         return await Ok(req, (await LoadTree(annotation.EducationChartId, client.Id, ct, byChart: true))!);
@@ -581,12 +453,12 @@ public class ManageEducationFunction
         var page = await _context.EducationPages
             .AsNoTracking()
             .AsSplitQuery()
-            .Include(p => p.Charts).ThenInclude(c => c.Series).ThenInclude(s => s.DataPoints)
             .Include(p => p.Charts).ThenInclude(c => c.Annotations)
             .Include(p => p.Assets).ThenInclude(a => a.Values)
             .FirstOrDefaultAsync(p => p.Id == pageId && p.ClientId == clientId, ct);
         if (page is null) return null;
-        return EducationMapper.Build(page, null, null);
+        var brands = await _context.Brands.AsNoTracking().Where(b => b.ClientId == clientId).ToListAsync(ct);
+        return EducationMapper.Build(page, brands, null, null);
     }
 
     private async Task<(Client? client, EducationPage? page, HttpResponseData? error)> ResolvePage(
@@ -627,6 +499,13 @@ public class ManageEducationFunction
     }
 
     private static string? Clean(string? value) => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+
+    private static string[] CleanGroups(List<string>? groups) =>
+        (groups ?? new List<string>())
+            .Select(g => g.Trim())
+            .Where(g => g.Length > 0)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
 
     private static bool CanManage(HttpRequestData req, FunctionContext context)
         => req.HasRole(context, "panwar-admin") || req.HasRole(context, "dashboard-editor");

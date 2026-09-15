@@ -3,19 +3,16 @@ using Panwar.Api.Models.DTOs;
 
 namespace Panwar.Api.Services;
 
-// Pass null bounds for the employee editor (unwindowed); client dash passes explicit from/to.
 internal static class EducationMapper
 {
+    private const string OtherBrand = "Other";
+
     public static EducationPageResponse Build(
-        EducationPage page, string? from, string? to, bool defaultLatestYear = false)
+        EducationPage page, IReadOnlyList<Brand> clientBrands, string? from, string? to, bool defaultLatestYear = false)
     {
-        var allOrds = page.Charts
-            .SelectMany(c => c.Series)
-            .SelectMany(s => s.DataPoints)
-            .Select(p => PeriodWindow.Ord(p.Year, p.Month))
-            .Concat(page.Assets
-                .SelectMany(a => a.Values)
-                .Select(v => PeriodWindow.Ord(v.Year, v.Month)))
+        var allOrds = page.Assets
+            .SelectMany(a => a.Values)
+            .Select(v => PeriodWindow.Ord(v.Year, v.Month))
             .ToList();
         int? availFromOrd = allOrds.Count > 0 ? allOrds.Min() : null;
         int? availToOrd = allOrds.Count > 0 ? allOrds.Max() : null;
@@ -33,40 +30,75 @@ internal static class EducationMapper
             return o >= fromOrd && o <= toOrd;
         }
 
-        var charts = page.Charts
-            .OrderBy(c => c.SortOrder).ThenBy(c => c.Title)
-            .Select(c => new EducationChartDto(
-                c.Id,
-                c.Title,
-                c.Subtitle,
-                c.SortOrder,
-                c.Series
-                    .OrderBy(s => s.SortOrder).ThenBy(s => s.Label)
-                    .Select(s => new EducationSeriesDto(
-                        s.Id,
-                        s.Label,
-                        s.Color,
-                        s.SortOrder,
-                        s.DataPoints
-                            .Where(p => InWindow(p.Year, p.Month))
-                            .OrderBy(p => p.Year).ThenBy(p => p.Month)
-                            .Select(p => new EducationPointDto(p.Year, p.Month, p.Value))
-                            .ToList()))
-                    .ToList(),
-                c.Annotations
-                    .Where(a => InWindow(a.Year, a.Month))
-                    .OrderBy(a => a.Year).ThenBy(a => a.Month)
-                    .Select(a => new EducationAnnotationDto(a.Id, a.EducationSeriesId, a.Year, a.Month, a.Text))
-                    .ToList()))
-            .ToList();
-
-        // Completed-style statuses sort first per the workbook's reading order.
         static int StatusRank(string status) => status.ToLowerInvariant() switch
         {
             "completed" or "completions" or "views" => 0,
             "enrolled" => 1,
             _ => 2,
         };
+
+        static bool IsCompletion(string status) => StatusRank(status) == 0;
+
+        string BrandOf(EducationAsset a) => string.IsNullOrWhiteSpace(a.Brand) ? OtherBrand : a.Brand.Trim();
+
+        var brandRank = clientBrands
+            .OrderBy(b => b.SortOrder).ThenBy(b => b.Name)
+            .Select((b, i) => (b.Name.ToLowerInvariant(), i))
+            .ToDictionary(x => x.Item1, x => x.i);
+        int BrandOrder(string brand) => brandRank.TryGetValue(brand.ToLowerInvariant(), out var i) ? i : brandRank.Count;
+        string? BrandColour(string brand) =>
+            clientBrands.FirstOrDefault(b => string.Equals(b.Name, brand, StringComparison.OrdinalIgnoreCase))?.Color;
+
+        List<EducationPointDto> Points(IEnumerable<EducationAssetValue> values) => values
+            .Where(v => IsCompletion(v.Status) && InWindow(v.Year, v.Month))
+            .GroupBy(v => (v.Year, v.Month))
+            .OrderBy(g => g.Key.Year).ThenBy(g => g.Key.Month)
+            .Select(g => new EducationPointDto(g.Key.Year, g.Key.Month, g.Sum(v => v.Value)))
+            .ToList();
+
+        var charts = page.Charts
+            .OrderBy(c => c.SortOrder).ThenBy(c => c.Title)
+            .Select(c =>
+            {
+                var groups = new HashSet<string>(c.GroupLabels, StringComparer.OrdinalIgnoreCase);
+                var chartAssets = page.Assets
+                    .Where(a => groups.Count == 0 || groups.Contains(a.GroupLabel))
+                    .OrderBy(a => a.SortOrder).ThenBy(a => a.Title)
+                    .ToList();
+
+                var brandSeries = chartAssets
+                    .GroupBy(BrandOf)
+                    .OrderBy(g => BrandOrder(g.Key)).ThenBy(g => g.Key)
+                    .Select(g => new EducationSeriesDto(
+                        g.Key,
+                        g.Key,
+                        BrandColour(g.Key),
+                        Points(g.SelectMany(a => a.Values))))
+                    .ToList();
+
+                var activitySeries = chartAssets
+                    .Select(a => new EducationSeriesDto(
+                        a.Id.ToString(),
+                        a.Title,
+                        BrandColour(BrandOf(a)),
+                        Points(a.Values)))
+                    .ToList();
+
+                return new EducationChartDto(
+                    c.Id,
+                    c.Title,
+                    c.Subtitle,
+                    c.SortOrder,
+                    c.GroupLabels,
+                    brandSeries,
+                    activitySeries,
+                    c.Annotations
+                        .Where(a => InWindow(a.Year, a.Month))
+                        .OrderBy(a => a.Year).ThenBy(a => a.Month)
+                        .Select(a => new EducationAnnotationDto(a.Id, a.Brand, a.Year, a.Month, a.Text))
+                        .ToList());
+            })
+            .ToList();
 
         var assets = page.Assets
             .OrderBy(a => a.SortOrder).ThenBy(a => a.Title)
@@ -100,7 +132,7 @@ internal static class EducationMapper
             AvailableFrom: availFromOrd.HasValue ? PeriodWindow.ToYm(availFromOrd.Value) : null,
             AvailableTo: availToOrd.HasValue ? PeriodWindow.ToYm(availToOrd.Value) : null);
 
-        var summary = new EducationPageSummaryDto(page.Id, page.Name, page.Slug, page.SortOrder, page.Charts.Count);
+        var summary = new EducationPageSummaryDto(page.Id, page.Name, page.Slug, page.SortOrder, page.Charts.Count, page.Assets.Count);
         return new EducationPageResponse(summary, period, charts, assets);
     }
 }

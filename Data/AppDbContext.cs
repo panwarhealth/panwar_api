@@ -30,8 +30,6 @@ public class AppDbContext : DbContext
     public DbSet<EducationCourseStatus> EducationCourseStatuses { get; set; } = null!;
     public DbSet<EducationPage> EducationPages { get; set; } = null!;
     public DbSet<EducationChart> EducationCharts { get; set; } = null!;
-    public DbSet<EducationSeries> EducationSeries { get; set; } = null!;
-    public DbSet<EducationDataPoint> EducationDataPoints { get; set; } = null!;
     public DbSet<EducationAnnotation> EducationAnnotations { get; set; } = null!;
     public DbSet<EducationAsset> EducationAssets { get; set; } = null!;
     public DbSet<EducationAssetValue> EducationAssetValues { get; set; } = null!;
@@ -76,8 +74,6 @@ public class AppDbContext : DbContext
         ConfigureEducationCourseStatus(modelBuilder);
         ConfigureEducationPage(modelBuilder);
         ConfigureEducationChart(modelBuilder);
-        ConfigureEducationSeries(modelBuilder);
-        ConfigureEducationDataPoint(modelBuilder);
         ConfigureEducationAnnotation(modelBuilder);
         ConfigureEducationAsset(modelBuilder);
         ConfigureUtmLink(modelBuilder);
@@ -419,35 +415,11 @@ public class AppDbContext : DbContext
             entity.HasKey(e => e.Id);
             entity.Property(e => e.Title).IsRequired().HasMaxLength(300);
             entity.Property(e => e.Subtitle).HasMaxLength(500);
+            entity.Property(e => e.GroupLabels).HasColumnType("text[]");
             entity.Property(e => e.CreatedAt).HasDefaultValueSql("CURRENT_TIMESTAMP");
             entity.Property(e => e.UpdatedAt).HasDefaultValueSql("CURRENT_TIMESTAMP");
             entity.HasOne(e => e.Page).WithMany(p => p.Charts).HasForeignKey(e => e.EducationPageId).OnDelete(DeleteBehavior.Cascade);
             entity.HasIndex(e => e.EducationPageId);
-        });
-    }
-
-    private static void ConfigureEducationSeries(ModelBuilder modelBuilder)
-    {
-        modelBuilder.Entity<EducationSeries>(entity =>
-        {
-            entity.ToTable("education_series");
-            entity.HasKey(e => e.Id);
-            entity.Property(e => e.Label).IsRequired().HasMaxLength(500);
-            entity.Property(e => e.Color).HasMaxLength(20);
-            entity.HasOne(e => e.Chart).WithMany(c => c.Series).HasForeignKey(e => e.EducationChartId).OnDelete(DeleteBehavior.Cascade);
-            entity.HasIndex(e => e.EducationChartId);
-        });
-    }
-
-    private static void ConfigureEducationDataPoint(ModelBuilder modelBuilder)
-    {
-        modelBuilder.Entity<EducationDataPoint>(entity =>
-        {
-            entity.ToTable("education_data_point");
-            entity.HasKey(e => e.Id);
-            entity.Property(e => e.Value).HasColumnType("numeric(18,4)");
-            entity.HasOne(e => e.Series).WithMany(s => s.DataPoints).HasForeignKey(e => e.EducationSeriesId).OnDelete(DeleteBehavior.Cascade);
-            entity.HasIndex(e => new { e.EducationSeriesId, e.Year, e.Month }).IsUnique();
         });
     }
 
@@ -457,12 +429,11 @@ public class AppDbContext : DbContext
         {
             entity.ToTable("education_annotation");
             entity.HasKey(e => e.Id);
+            entity.Property(e => e.Brand).IsRequired().HasMaxLength(100);
             entity.Property(e => e.Text).IsRequired().HasMaxLength(1000);
             entity.Property(e => e.CreatedAt).HasDefaultValueSql("CURRENT_TIMESTAMP");
             entity.Property(e => e.UpdatedAt).HasDefaultValueSql("CURRENT_TIMESTAMP");
             entity.HasOne(e => e.Chart).WithMany(c => c.Annotations).HasForeignKey(e => e.EducationChartId).OnDelete(DeleteBehavior.Cascade);
-            // Series delete cascades to its annotations too (Npgsql supports multiple cascade paths).
-            entity.HasOne(e => e.Series).WithMany().HasForeignKey(e => e.EducationSeriesId).OnDelete(DeleteBehavior.Cascade);
             entity.HasOne(e => e.CreatedBy).WithMany().HasForeignKey(e => e.CreatedByUserId).OnDelete(DeleteBehavior.SetNull);
             entity.HasIndex(e => e.EducationChartId);
         });
