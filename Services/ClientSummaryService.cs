@@ -279,9 +279,21 @@ public class ClientSummaryService : IClientSummaryService
                 BrandName: p.Brand.Name,
                 BrandSlug: p.Brand.Slug,
                 AudienceName: p.Audience.Name,
+                AudienceSlug: p.Audience.Slug,
                 PublisherName: p.Publisher.Name,
+                PublisherSlug: p.Publisher.Slug,
                 Objective: p.Objective.ToString(),
                 TemplateCode: PlacementEnumNames.ToName(p.Template.Code),
+                MediaType: MediaTypeOf(p.Template.Code, p.EdmSubcategory),
+                OsCode: p.OsCode,
+                LiveMonths: p.LiveMonths,
+                StartDate: p.StartDate?.ToString("yyyy-MM-dd"),
+                EndDate: p.EndDate?.ToString("yyyy-MM-dd"),
+                SendDates: (p.SendDates.Length > 0 ? p.SendDates : (p.StartDate is { } sd ? new[] { sd } : Array.Empty<DateOnly>()))
+                    .Where(d => PeriodWindow.Ord(d) >= fromOrd && PeriodWindow.Ord(d) <= toOrd)
+                    .OrderBy(d => d)
+                    .Select(d => d.ToString("yyyy-MM-dd"))
+                    .ToList(),
                 MediaCost: Costing(new[] { p }).Sum(x => x.MediaCost),
                 CpdInvestmentCost: 0m,
                 Metrics: WindowMetrics(new[] { p }),

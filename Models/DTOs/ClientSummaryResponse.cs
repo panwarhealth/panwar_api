@@ -35,10 +35,6 @@ public sealed record ClientSummaryResponse(
 
 public sealed record YearSummaryDto(int Year, string Text);
 
-/// <summary>One brand's in-window monthly metric series (for the overview brand chart).</summary>
-
-/// <summary>One month's per-brand metrics, split so the client can toggle Digital / Print / All. Metrics = all categories.</summary>
-
 public sealed record ClientSummaryClientDto(Guid Id, string Name, string Slug);
 
 public sealed record BrandRefDto(string Slug, string Name, string? Color);
@@ -68,9 +64,17 @@ public sealed record AssetRowDto(
     string BrandName,
     string BrandSlug,
     string AudienceName,
+    string AudienceSlug,
     string PublisherName,
+    string PublisherSlug,
     string Objective,
     string TemplateCode,
+    string MediaType,
+    string? OsCode,
+    int[] LiveMonths,
+    string? StartDate,
+    string? EndDate,
+    IReadOnlyList<string> SendDates,
     decimal MediaCost,
     decimal CpdInvestmentCost,
     IReadOnlyDictionary<string, decimal> Metrics,
