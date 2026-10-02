@@ -99,9 +99,9 @@ public record PlacementSuggestionDto(
     IReadOnlyList<SuggestionValueDto> Values,
     IReadOnlyList<string> SendDates,           // eDM send dates the AI read from the note (ISO yyyy-MM-dd)
     IReadOnlyList<SuggestionCellRefDto> Evidence, // cells that told the AI when/what (highlighted as proof)
-    // Every one of this send's values is already stored on its target, at the same
-    // month with the same number. A block that fans out to several placements has no
-    // single match of its own, so this is the only way to tell it changes nothing.
+                                                  // Every one of this send's values is already stored on its target, at the same
+                                                  // month with the same number. A block that fans out to several placements has no
+                                                  // single match of its own, so this is the only way to tell it changes nothing.
     bool AlreadySaved = false);
 
 // A cell the AI points at as justification (a note, a date row) rather than a number.

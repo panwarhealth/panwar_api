@@ -557,56 +557,56 @@ public class ImportReconciliationService : IImportReconciliationService
                 return string.Join("\n", sheets.Select(s => $"{s.Sheet} ({s.Rows} rows x {s.Cols} cols)"));
 
             case "read_tab":
-            {
-                var sheet = FindSheet(sheets, GetString(input, "sheet"));
-                if (sheet is null) return "error: sheet not found";
-                var sb = new StringBuilder();
-                for (int r = 1; r <= sheet.Rows; r++)
                 {
-                    var cells = new List<string>();
-                    for (int c = 1; c <= sheet.Cols; c++)
+                    var sheet = FindSheet(sheets, GetString(input, "sheet"));
+                    if (sheet is null) return "error: sheet not found";
+                    var sb = new StringBuilder();
+                    for (int r = 1; r <= sheet.Rows; r++)
                     {
-                        var a1 = $"{Spreadsheet.ColLetter(c)}{r}";
-                        if (sheet.Cells.TryGetValue(a1, out var v))
+                        var cells = new List<string>();
+                        for (int c = 1; c <= sheet.Cols; c++)
                         {
-                            cells.Add($"{Spreadsheet.ColLetter(c)}={v}");
-                            cellsRead[$"{sheet.Sheet}!{a1}"] = v;
+                            var a1 = $"{Spreadsheet.ColLetter(c)}{r}";
+                            if (sheet.Cells.TryGetValue(a1, out var v))
+                            {
+                                cells.Add($"{Spreadsheet.ColLetter(c)}={v}");
+                                cellsRead[$"{sheet.Sheet}!{a1}"] = v;
+                            }
                         }
+                        if (cells.Count > 0) sb.Append('r').Append(r).Append(": ").AppendLine(string.Join(" | ", cells));
                     }
-                    if (cells.Count > 0) sb.Append('r').Append(r).Append(": ").AppendLine(string.Join(" | ", cells));
+                    return sb.Length == 0 ? "(empty sheet)" : sb.ToString();
                 }
-                return sb.Length == 0 ? "(empty sheet)" : sb.ToString();
-            }
 
             case "read_cells":
-            {
-                var sheet = FindSheet(sheets, GetString(input, "sheet"));
-                if (sheet is null) return "error: sheet not found";
-                var lines = new List<string>();
-                if (input.TryGetProperty("cells", out var cellsEl) && cellsEl.ValueKind == JsonValueKind.Array)
-                    foreach (var cellEl in cellsEl.EnumerateArray())
-                    {
-                        var a1 = (cellEl.GetString() ?? "").Trim().ToUpperInvariant();
-                        if (a1.Length == 0) continue;
-                        var v = sheet.Cells.TryGetValue(a1, out var val) ? val : "(empty)";
-                        lines.Add($"{a1}={v}");
-                        cellsRead[$"{sheet.Sheet}!{a1}"] = v;
-                    }
-                return lines.Count == 0 ? "(no cells)" : string.Join("\n", lines);
-            }
+                {
+                    var sheet = FindSheet(sheets, GetString(input, "sheet"));
+                    if (sheet is null) return "error: sheet not found";
+                    var lines = new List<string>();
+                    if (input.TryGetProperty("cells", out var cellsEl) && cellsEl.ValueKind == JsonValueKind.Array)
+                        foreach (var cellEl in cellsEl.EnumerateArray())
+                        {
+                            var a1 = (cellEl.GetString() ?? "").Trim().ToUpperInvariant();
+                            if (a1.Length == 0) continue;
+                            var v = sheet.Cells.TryGetValue(a1, out var val) ? val : "(empty)";
+                            lines.Add($"{a1}={v}");
+                            cellsRead[$"{sheet.Sheet}!{a1}"] = v;
+                        }
+                    return lines.Count == 0 ? "(no cells)" : string.Join("\n", lines);
+                }
 
             case "read_comments":
-            {
-                var wanted = GetString(input, "sheet");
-                var targets = string.IsNullOrWhiteSpace(wanted)
-                    ? sheets
-                    : sheets.Where(s => string.Equals(s.Sheet, wanted, StringComparison.OrdinalIgnoreCase)).ToList();
-                var lines = new List<string>();
-                foreach (var s in targets)
-                    foreach (var cm in s.Comments)
-                        lines.Add($"{s.Sheet}!{cm.Cell}: {cm.Text}");
-                return lines.Count == 0 ? "(no comments)" : string.Join("\n", lines);
-            }
+                {
+                    var wanted = GetString(input, "sheet");
+                    var targets = string.IsNullOrWhiteSpace(wanted)
+                        ? sheets
+                        : sheets.Where(s => string.Equals(s.Sheet, wanted, StringComparison.OrdinalIgnoreCase)).ToList();
+                    var lines = new List<string>();
+                    foreach (var s in targets)
+                        foreach (var cm in s.Comments)
+                            lines.Add($"{s.Sheet}!{cm.Cell}: {cm.Text}");
+                    return lines.Count == 0 ? "(no comments)" : string.Join("\n", lines);
+                }
 
             default:
                 return $"error: unknown tool {name}";
@@ -799,18 +799,18 @@ public class ImportReconciliationService : IImportReconciliationService
                     ? "The AI is reading the comments in the file..."
                     : $"The AI is reading the comments on the '{sheet}' tab...";
             case "read_cells":
-            {
-                var cells = new List<string>();
-                if (input.ValueKind == JsonValueKind.Object && input.TryGetProperty("cells", out var arr) && arr.ValueKind == JsonValueKind.Array)
-                    foreach (var el in arr.EnumerateArray())
-                    {
-                        if (el.GetString() is { Length: > 0 } s) cells.Add(s.Trim().ToUpperInvariant());
-                        if (cells.Count == 6) break;
-                    }
-                if (cells.Count == 0) return $"The AI is reading cells on the '{sheet}' tab...";
-                var list = cells.Count > 5 ? string.Join(", ", cells.Take(5)) + "…" : string.Join(", ", cells);
-                return $"The AI is reading cell{(cells.Count > 1 ? "s" : "")} {list} on the '{sheet}' tab...";
-            }
+                {
+                    var cells = new List<string>();
+                    if (input.ValueKind == JsonValueKind.Object && input.TryGetProperty("cells", out var arr) && arr.ValueKind == JsonValueKind.Array)
+                        foreach (var el in arr.EnumerateArray())
+                        {
+                            if (el.GetString() is { Length: > 0 } s) cells.Add(s.Trim().ToUpperInvariant());
+                            if (cells.Count == 6) break;
+                        }
+                    if (cells.Count == 0) return $"The AI is reading cells on the '{sheet}' tab...";
+                    var list = cells.Count > 5 ? string.Join(", ", cells.Take(5)) + "…" : string.Join(", ", cells);
+                    return $"The AI is reading cell{(cells.Count > 1 ? "s" : "")} {list} on the '{sheet}' tab...";
+                }
             default:
                 return $"The AI is working through the notes in {file}...";
         }

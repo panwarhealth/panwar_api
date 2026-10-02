@@ -207,78 +207,78 @@ public class AnthropicService : IAnthropicService
                     break;
 
                 case "content_block_start":
-                {
-                    var idx = evt["index"]!.GetValue<int>();
-                    var cb = evt["content_block"] as JsonObject ?? new JsonObject();
-                    blocks[idx] = (JsonObject)cb.DeepClone();
-                    var btype = cb["type"]?.GetValue<string>();
-                    if (btype == "tool_use")
                     {
-                        jsonAcc[idx] = new StringBuilder();
-                        if (cb["name"]?.GetValue<string>() == terminalToolName)
+                        var idx = evt["index"]!.GetValue<int>();
+                        var cb = evt["content_block"] as JsonObject ?? new JsonObject();
+                        blocks[idx] = (JsonObject)cb.DeepClone();
+                        var btype = cb["type"]?.GetValue<string>();
+                        if (btype == "tool_use")
                         {
-                            terminalIdx = idx;
-                            onStatus?.Invoke("The AI is writing up its answer...");
+                            jsonAcc[idx] = new StringBuilder();
+                            if (cb["name"]?.GetValue<string>() == terminalToolName)
+                            {
+                                terminalIdx = idx;
+                                onStatus?.Invoke("The AI is writing up its answer...");
+                            }
                         }
+                        else if (btype == "thinking")
+                        {
+                            thinkAcc[idx] = new StringBuilder();
+                            sigAcc[idx] = new StringBuilder();
+                            thinkingSince ??= DateTime.UtcNow;
+                            onStatus?.Invoke("The AI is thinking...");
+                            lastReport = DateTime.UtcNow;
+                        }
+                        else if (btype == "text")
+                        {
+                            textAcc[idx] = new StringBuilder();
+                        }
+                        break;
                     }
-                    else if (btype == "thinking")
-                    {
-                        thinkAcc[idx] = new StringBuilder();
-                        sigAcc[idx] = new StringBuilder();
-                        thinkingSince ??= DateTime.UtcNow;
-                        onStatus?.Invoke("The AI is thinking...");
-                        lastReport = DateTime.UtcNow;
-                    }
-                    else if (btype == "text")
-                    {
-                        textAcc[idx] = new StringBuilder();
-                    }
-                    break;
-                }
 
                 case "content_block_delta":
-                {
-                    var idx = evt["index"]!.GetValue<int>();
-                    var delta = evt["delta"] as JsonObject;
-                    switch (delta?["type"]?.GetValue<string>())
                     {
-                        case "text_delta":
-                            textAcc.GetValueOrDefault(idx)?.Append(delta["text"]?.GetValue<string>());
-                            break;
-                        case "thinking_delta":
+                        var idx = evt["index"]!.GetValue<int>();
+                        var delta = evt["delta"] as JsonObject;
+                        switch (delta?["type"]?.GetValue<string>())
                         {
-                            var acc = thinkAcc.GetValueOrDefault(idx);
-                            acc?.Append(delta["thinking"]?.GetValue<string>());
-                            if (acc is not null && (DateTime.UtcNow - lastReport).TotalSeconds >= 3)
-                            {
-                                lastReport = DateTime.UtcNow;
-                                // The stream gives us a live summary of the model's reasoning -
-                                // show its tail so the user sees WHAT it's working on, not a timer.
-                                var snippet = ThinkingSnippet(acc);
-                                var secs = (int)(DateTime.UtcNow - (thinkingSince ?? DateTime.UtcNow)).TotalSeconds;
-                                onStatus?.Invoke(snippet is null
-                                    ? $"The AI is thinking... ({secs}s on this step)"
-                                    : $"The AI is thinking: \"{snippet}\"");
-                            }
-                            break;
+                            case "text_delta":
+                                textAcc.GetValueOrDefault(idx)?.Append(delta["text"]?.GetValue<string>());
+                                break;
+                            case "thinking_delta":
+                                {
+                                    var acc = thinkAcc.GetValueOrDefault(idx);
+                                    acc?.Append(delta["thinking"]?.GetValue<string>());
+                                    if (acc is not null && (DateTime.UtcNow - lastReport).TotalSeconds >= 3)
+                                    {
+                                        lastReport = DateTime.UtcNow;
+                                        // The stream gives us a live summary of the model's reasoning -
+                                        // show its tail so the user sees WHAT it's working on, not a timer.
+                                        var snippet = ThinkingSnippet(acc);
+                                        var secs = (int)(DateTime.UtcNow - (thinkingSince ?? DateTime.UtcNow)).TotalSeconds;
+                                        onStatus?.Invoke(snippet is null
+                                            ? $"The AI is thinking... ({secs}s on this step)"
+                                            : $"The AI is thinking: \"{snippet}\"");
+                                    }
+                                    break;
+                                }
+                            case "signature_delta":
+                                sigAcc.GetValueOrDefault(idx)?.Append(delta["signature"]?.GetValue<string>());
+                                break;
+                            case "input_json_delta":
+                                {
+                                    var acc = jsonAcc.GetValueOrDefault(idx);
+                                    acc?.Append(delta["partial_json"]?.GetValue<string>());
+                                    if (idx == terminalIdx && acc is not null && (DateTime.UtcNow - lastReport).TotalSeconds >= 3)
+                                    {
+                                        lastReport = DateTime.UtcNow;
+                                        onStatus?.Invoke(AnswerProgress(acc.ToString()));
+                                    }
+                                    break;
+                                }
                         }
-                        case "signature_delta":
-                            sigAcc.GetValueOrDefault(idx)?.Append(delta["signature"]?.GetValue<string>());
-                            break;
-                        case "input_json_delta":
-                        {
-                            var acc = jsonAcc.GetValueOrDefault(idx);
-                            acc?.Append(delta["partial_json"]?.GetValue<string>());
-                            if (idx == terminalIdx && acc is not null && (DateTime.UtcNow - lastReport).TotalSeconds >= 3)
-                            {
-                                lastReport = DateTime.UtcNow;
-                                onStatus?.Invoke(AnswerProgress(acc.ToString()));
-                            }
-                            break;
-                        }
+                        break;
                     }
-                    break;
-                }
 
                 case "message_delta":
                     stopReason ??= evt["delta"]?["stop_reason"]?.GetValue<string>();

@@ -10,8 +10,18 @@ public sealed class MonthTabsAdapter : IWorkbookAdapter
 
     private static readonly Dictionary<string, int> Months = new(StringComparer.OrdinalIgnoreCase)
     {
-        ["JAN"] = 1, ["FEB"] = 2, ["MAR"] = 3, ["APR"] = 4, ["MAY"] = 5, ["JUN"] = 6,
-        ["JUL"] = 7, ["AUG"] = 8, ["SEP"] = 9, ["OCT"] = 10, ["NOV"] = 11, ["DEC"] = 12,
+        ["JAN"] = 1,
+        ["FEB"] = 2,
+        ["MAR"] = 3,
+        ["APR"] = 4,
+        ["MAY"] = 5,
+        ["JUN"] = 6,
+        ["JUL"] = 7,
+        ["AUG"] = 8,
+        ["SEP"] = 9,
+        ["OCT"] = 10,
+        ["NOV"] = 11,
+        ["DEC"] = 12,
     };
 
     public AdapterMatch Detect(IXLWorkbook wb)
