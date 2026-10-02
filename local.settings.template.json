@@ -28,7 +28,9 @@
         "ENTRA_TENANT_ID": "cf8d8b82-d1e1-44f7-a41a-941cfa7a82b1",
         "ENTRA_EMPLOYEE_SSO_CLIENT_ID": "479359b6-04f9-4471-9dd5-924e4365da7c",
         "ENTRA_CLIENT_SECRET": "<FROM app reg Certificates & secrets>",
-        "ENTRA_CLIENT_SECRET_EXPIRY": "2028-04-13"
+        "ENTRA_CLIENT_SECRET_EXPIRY": "2028-04-13",
+        "SHAREPOINT_SITE_ID": "panwarhealth.sharepoint.com,bb1dc030-29a3-4095-bff5-aebfee9c8397,7a5392ee-12f9-45b3-a6ee-c4dd04333675",
+        "SHAREPOINT_JOBS_PATH": "Panwar Health Active"
     },
     "Host": {
         "CORS": "http://localhost:5173,http://localhost:5174,https://portal.panwarhealth.com.au,https://staff.panwarhealth.com.au",

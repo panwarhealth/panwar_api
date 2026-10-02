@@ -5,6 +5,7 @@ public interface IGraphService
     Task<List<GraphUser>> GetUsersWithRolesAsync(CancellationToken cancellationToken = default);
     Task<string> AssignRoleAsync(string userObjectId, string roleValue, CancellationToken cancellationToken = default);
     Task RemoveRoleAsync(string userObjectId, string assignmentId, CancellationToken cancellationToken = default);
+    Task<List<string>> GetFolderNamesAsync(string siteId, string folderPath, CancellationToken cancellationToken = default);
 }
 
 public class GraphUser

@@ -2,6 +2,7 @@ using System.Net;
 using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using Microsoft.Identity.Client;
@@ -167,6 +168,24 @@ public class GraphService : IGraphService
         }
     }
 
+    public async Task<List<string>> GetFolderNamesAsync(string siteId, string folderPath, CancellationToken cancellationToken = default)
+    {
+        var token = await GetTokenAsync(cancellationToken);
+        var encodedPath = string.Join('/', folderPath.Split('/', StringSplitOptions.RemoveEmptyEntries).Select(Uri.EscapeDataString));
+        var url = $"https://graph.microsoft.com/v1.0/sites/{siteId}/drive/root:/{encodedPath}:/children?$select=name,folder&$top=999";
+
+        var names = new List<string>();
+        while (!string.IsNullOrEmpty(url))
+        {
+            var json = await GraphGetAsync(token, url, cancellationToken);
+            var result = JsonSerializer.Deserialize<GraphListResponse<GraphDriveItemDto>>(json, JsonOptions);
+            if (result?.Value is not null)
+                names.AddRange(result.Value.Where(i => i.Folder is not null).Select(i => i.Name));
+            url = result?.OdataNextLink;
+        }
+        return names;
+    }
+
     // Scans appRoleAssignedTo to recover an existing assignment id (small staff set, scan is fine).
     private async Task<string?> FindAssignmentIdAsync(
         string token, string userObjectId, string appRoleId, CancellationToken cancellationToken)
@@ -274,6 +293,8 @@ public class GraphService : IGraphService
     private class GraphListResponse<T>
     {
         public List<T>? Value { get; set; }
+
+        [JsonPropertyName("@odata.nextLink")]
         public string? OdataNextLink { get; set; }
     }
 
@@ -283,6 +304,12 @@ public class GraphService : IGraphService
         public string? DisplayName { get; set; }
         public string? Mail { get; set; }
         public string? UserPrincipalName { get; set; }
+    }
+
+    private class GraphDriveItemDto
+    {
+        public string Name { get; set; } = "";
+        public JsonElement? Folder { get; set; }
     }
 
     private class GraphServicePrincipalDto

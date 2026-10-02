@@ -76,6 +76,8 @@ var host = new HostBuilder()
 
         services.AddScoped<IClientSummaryService, ClientSummaryService>();
         services.AddScoped<IEducationService, EducationService>();
+        services.AddSingleton<IJobClientService, JobClientService>();
+        services.AddScoped<ILinkService, LinkService>();
 
         services.AddScoped<IPlacementWriteService, PlacementWriteService>();
         services.AddScoped<IEducationWriteService, EducationWriteService>();

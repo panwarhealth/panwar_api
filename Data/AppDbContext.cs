@@ -47,6 +47,8 @@ public class AppDbContext : DbContext
     public DbSet<ImportAiCache> ImportAiCaches { get; set; } = null!;
     public DbSet<ImportAiLog> ImportAiLogs { get; set; } = null!;
     public DbSet<ImportNameAlias> ImportNameAliases { get; set; } = null!;
+    public DbSet<TrackedLink> TrackedLinks { get; set; } = null!;
+    public DbSet<QrCode> QrCodes { get; set; } = null!;
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -88,6 +90,42 @@ public class AppDbContext : DbContext
         ConfigureImportAiCache(modelBuilder);
         ConfigureImportAiLog(modelBuilder);
         ConfigureImportNameAlias(modelBuilder);
+        ConfigureTrackedLink(modelBuilder);
+        ConfigureQrCode(modelBuilder);
+    }
+
+    private static void ConfigureTrackedLink(ModelBuilder modelBuilder)
+    {
+        modelBuilder.Entity<TrackedLink>(entity =>
+        {
+            entity.ToTable("tracked_link");
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.DestinationUrl).IsRequired().HasMaxLength(2000);
+            entity.Property(e => e.CampaignId).IsRequired().HasMaxLength(40);
+            entity.Property(e => e.ClientName).HasMaxLength(200);
+            entity.Property(e => e.Source).IsRequired().HasMaxLength(50);
+            entity.Property(e => e.Medium).IsRequired().HasMaxLength(50);
+            entity.Property(e => e.Content).HasMaxLength(50);
+            entity.Property(e => e.Url).IsRequired().HasMaxLength(2500);
+            entity.Property(e => e.CreatedAt).HasDefaultValueSql("CURRENT_TIMESTAMP");
+            entity.Property(e => e.UpdatedAt).HasDefaultValueSql("CURRENT_TIMESTAMP");
+            entity.HasOne(e => e.Creator).WithMany().HasForeignKey(e => e.CreatedBy).OnDelete(DeleteBehavior.Restrict);
+            entity.HasIndex(e => e.CampaignId);
+        });
+    }
+
+    private static void ConfigureQrCode(ModelBuilder modelBuilder)
+    {
+        modelBuilder.Entity<QrCode>(entity =>
+        {
+            entity.ToTable("qr_code");
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Url).IsRequired().HasMaxLength(2500);
+            entity.Property(e => e.Foreground).IsRequired().HasMaxLength(7);
+            entity.Property(e => e.Background).IsRequired().HasMaxLength(7);
+            entity.Property(e => e.CreatedAt).HasDefaultValueSql("CURRENT_TIMESTAMP");
+            entity.HasOne(e => e.Creator).WithMany().HasForeignKey(e => e.CreatedBy).OnDelete(DeleteBehavior.Restrict);
+        });
     }
 
     private static void ConfigureClient(ModelBuilder modelBuilder)
