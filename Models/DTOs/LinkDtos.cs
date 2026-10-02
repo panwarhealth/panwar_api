@@ -32,6 +32,11 @@ public class TrackedLinkWriteRequest
     public string Medium { get; set; } = "";
 }
 
+public class UrlCheckRequest
+{
+    public string Url { get; set; } = "";
+}
+
 public class TrackedLinkContentRequest
 {
     public string? Content { get; set; }

@@ -14,10 +14,31 @@ public class LinksFunction
     private static readonly JsonSerializerOptions JsonOptions = new() { PropertyNameCaseInsensitive = true };
 
     private readonly ILinkService _linkService;
+    private readonly IUrlCheckService _urlCheckService;
 
-    public LinksFunction(ILinkService linkService)
+    public LinksFunction(ILinkService linkService, IUrlCheckService urlCheckService)
     {
         _linkService = linkService;
+        _urlCheckService = urlCheckService;
+    }
+
+    [Function("CheckUrl")]
+    public async Task<HttpResponseData> CheckUrl(
+        [HttpTrigger(AuthorizationLevel.Anonymous, "post", Route = "url-check")] HttpRequestData req,
+        FunctionContext context)
+    {
+        if (GetEmployeeId(req, context) is null) return await req.CreateForbiddenResponseAsync();
+
+        var data = await ReadJson<UrlCheckRequest>(req);
+        if (data is null
+            || !Uri.TryCreate(data.Url.Trim(), UriKind.Absolute, out var url)
+            || (url.Scheme != Uri.UriSchemeHttp && url.Scheme != Uri.UriSchemeHttps))
+            return await BadRequest(req, "That doesn't look like a web address");
+
+        var result = await _urlCheckService.CheckAsync(url, context.CancellationToken);
+        var resp = req.CreateResponse(HttpStatusCode.OK);
+        await resp.WriteAsJsonAsync(result);
+        return resp;
     }
 
     [Function("ListLinks")]

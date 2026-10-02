@@ -77,6 +77,9 @@ var host = new HostBuilder()
         services.AddScoped<IClientSummaryService, ClientSummaryService>();
         services.AddScoped<IEducationService, EducationService>();
         services.AddSingleton<IJobClientService, JobClientService>();
+        services.AddHttpClient(UrlCheckService.HttpClientName)
+            .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler { AllowAutoRedirect = false });
+        services.AddScoped<IUrlCheckService, UrlCheckService>();
         services.AddScoped<ILinkService, LinkService>();
 
         services.AddScoped<IPlacementWriteService, PlacementWriteService>();
