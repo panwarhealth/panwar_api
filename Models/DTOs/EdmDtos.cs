@@ -40,8 +40,6 @@ public class EdmListWriteRequest
 {
     public string Name { get; set; } = "";
     public Guid SenderId { get; set; }
-    // Only read on create: null for a custom (CSV) list, "PharmaChat" / "ClinicalStudio" for a synced one.
-    public string? SyncSource { get; set; }
 }
 
 public sealed record EdmContactDto(

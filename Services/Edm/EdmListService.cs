@@ -91,22 +91,12 @@ public class EdmListService : IEdmListService
         var name = EdmText.Required(data.Name, "Name", 150);
         await RequireSenderAsync(data.SenderId, ct);
 
-        EdmSyncSource? source = null;
-        if (!string.IsNullOrWhiteSpace(data.SyncSource))
-        {
-            if (!Enum.TryParse<EdmSyncSource>(data.SyncSource, true, out var parsed))
-                throw new EdmValidationException("Unknown sync source");
-            if (await _context.EdmLists.AnyAsync(l => l.SyncSource == parsed, ct))
-                throw new EdmValidationException($"There's already a {parsed} synced list");
-            source = parsed;
-        }
-
+        // Staff only make custom lists; the synced ones are seeded, one per platform.
         var list = new EdmList
         {
             Id = Guid.NewGuid(),
             Name = name,
-            Kind = source is null ? EdmListKind.Custom : EdmListKind.Synced,
-            SyncSource = source,
+            Kind = EdmListKind.Custom,
             SenderId = data.SenderId,
             CreatedBy = userId,
             CreatedAt = DateTime.UtcNow,
@@ -136,6 +126,8 @@ public class EdmListService : IEdmListService
     {
         var list = await _context.EdmLists.FirstOrDefaultAsync(l => l.Id == id, ct);
         if (list is null) return false;
+        if (list.Kind == EdmListKind.Synced)
+            throw new EdmValidationException("Synced lists are part of the platform sync and can't be deleted");
         if (await _context.EdmCampaigns.AnyAsync(c => c.ListId == id && c.Status != EdmCampaignStatus.Draft, ct))
             throw new EdmValidationException("This list has campaigns sent or scheduled to it, so it can't be deleted");
 
