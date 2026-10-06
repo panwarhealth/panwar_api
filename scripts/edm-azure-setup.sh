@@ -78,7 +78,7 @@ configure() {
   if ! grep -q '"value": "mailer"' <<<"$roles"; then
     new=$(py -c "import json,sys,uuid; r=json.loads(sys.argv[1]); r.append({'allowedMemberTypes':['User'],'description':'Send eDMs with the eDM Mailer','displayName':'Mailer','id':str(uuid.uuid4()),'isEnabled':True,'value':'mailer'}); print(json.dumps(r))" "$roles")
     tmp=$(mktemp); echo "$new" >"$tmp"
-    az ad app update --id "$ENTRA_APP_ID" --app-roles @"$tmp"
+    az ad app update --id "$ENTRA_APP_ID" --app-roles @"$(cygpath -w "$tmp")"
     rm "$tmp"
     echo "Added the mailer app role. Restart $API_APP so Users & Roles sees it."
   fi
