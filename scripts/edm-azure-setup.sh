@@ -44,7 +44,7 @@ create() {
     d=$(domain_of "$s")
     echo "--- $d"
     az communication email domain show --domain-name "$d" --email-service-name "$EMAIL_SERVICE" -g "$RG" \
-      --query "verificationRecords.{Domain:domain, SPF:spf, DKIM:dkim, DKIM2:dkim2}" -o json
+      --query "verificationRecords.[Domain, SPF, DKIM, DKIM2][].{type:type, name:name, value:value}" -o table
   done
   echo
   echo "If a domain already has an SPF record, merge include:spf.protection.outlook.com into it rather than adding a second one."
