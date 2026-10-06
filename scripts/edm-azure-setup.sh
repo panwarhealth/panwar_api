@@ -10,6 +10,8 @@
 #
 # Every phase is safe to re-run.
 set -euo pipefail
+# Git Bash would otherwise rewrite Azure resource ids (/subscriptions/...) into Windows paths.
+export MSYS_NO_PATHCONV=1
 
 RG=panwarhealth
 EMAIL_SERVICE=panwar-email
