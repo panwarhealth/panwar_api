@@ -90,8 +90,11 @@ configure() {
   pc_key=$(existing EDM_SYNC_PHARMACHAT_KEY); [ -n "$pc_key" ] || pc_key=$(openssl rand -hex 32)
   lms_key=$(existing EDM_SYNC_CLINICALSTUDIO_KEY); [ -n "$lms_key" ] || lms_key=$(openssl rand -hex 32)
   acs_conn=$(az communication list-key -n "$ACS" -g "$RG" --query primaryConnectionString -o tsv)
-  pc_host=$(az functionapp show -n pharmachat-api-flex -g pharmachat --query defaultHostName -o tsv)
-  lms_host=$(az functionapp show -n lms-api -g LMS --query defaultHostName -o tsv)
+  # functionapp show returns no host for Flex Consumption apps; list does.
+  host_of() { az functionapp list --query "[?name=='$1'].defaultHostName | [0]" -o tsv; }
+  pc_host=$(host_of pharmachat-api-flex)
+  lms_host=$(host_of lms-api)
+  [ -n "$pc_host" ] && [ -n "$lms_host" ] || { echo "Couldn't find the PharmaChat or LMS function app host."; exit 1; }
 
   az functionapp config appsettings set -n "$API_APP" -g "$RG" -o none --settings \
     "ACS_EMAIL_CONNECTION_STRING=$acs_conn" \
