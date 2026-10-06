@@ -41,17 +41,12 @@ public class EdmFunction
         [HttpTrigger(AuthorizationLevel.Anonymous, "get", Route = "edm/senders")] HttpRequestData req, FunctionContext context)
         => Handle(req, context, async (_, ct) => await Ok(req, new { senders = await _lists.ListSendersAsync(ct) }));
 
-    [Function("EdmCreateSender")]
-    public Task<HttpResponseData> CreateSender(
-        [HttpTrigger(AuthorizationLevel.Anonymous, "post", Route = "edm/senders")] HttpRequestData req, FunctionContext context)
-        => Handle(req, context, async (_, ct) =>
-            await Ok(req, await _lists.SaveSenderAsync(null, await Body<EdmSenderWriteRequest>(req), ct), HttpStatusCode.Created));
-
+    // Senders come from the ACS setup (seeded by migration); staff can only change their branding.
     [Function("EdmUpdateSender")]
     public Task<HttpResponseData> UpdateSender(
         [HttpTrigger(AuthorizationLevel.Anonymous, "put", Route = "edm/senders/{senderId:guid}")] HttpRequestData req, FunctionContext context, Guid senderId)
         => Handle(req, context, async (_, ct) =>
-            await Ok(req, await _lists.SaveSenderAsync(senderId, await Body<EdmSenderWriteRequest>(req), ct)));
+            await OkOrNotFound(req, await _lists.UpdateSenderBrandingAsync(senderId, await Body<EdmSenderBrandingRequest>(req), ct)));
 
     // ---- lists ----
 

@@ -20,7 +20,8 @@ API_APP=panwar-api
 API_BASE=https://api.panwarhealth.com.au
 ENTRA_APP_ID=479359b6-04f9-4471-9dd5-924e4365da7c
 
-# domain|sender username|display name — must match the Senders added in the Mailer.
+# domain|sender username|display name. Each one is also seeded into edm_sender by a migration
+# (see Migrations/*_SeedEdmSenders.cs); a new brand needs a line here, a new migration, and DNS.
 SENDERS=(
   "pharmachat.com.au|updates|PharmaChat"
   "clinicalstudio.com.au|insights|Clinical Studio"

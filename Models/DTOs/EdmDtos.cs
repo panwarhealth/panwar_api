@@ -11,10 +11,10 @@ public sealed record EdmSenderDto(
     string? LogoUrl,
     string FooterText);
 
-public class EdmSenderWriteRequest
+// Only the branding is editable. Name and FromAddress mirror the sender username set up on the
+// ACS domain (scripts/edm-azure-setup.sh), so they change there and in a migration, never here.
+public class EdmSenderBrandingRequest
 {
-    public string Name { get; set; } = "";
-    public string FromAddress { get; set; } = "";
     public string? ReplyTo { get; set; }
     public string BrandColour { get; set; } = "";
     public string? LogoUrl { get; set; }

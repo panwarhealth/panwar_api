@@ -10,7 +10,7 @@ namespace Panwar.Api.Services.Edm;
 public interface IEdmListService
 {
     Task<IReadOnlyList<EdmSenderDto>> ListSendersAsync(CancellationToken ct = default);
-    Task<EdmSenderDto> SaveSenderAsync(Guid? id, EdmSenderWriteRequest data, CancellationToken ct = default);
+    Task<EdmSenderDto?> UpdateSenderBrandingAsync(Guid id, EdmSenderBrandingRequest data, CancellationToken ct = default);
 
     Task<IReadOnlyList<EdmListDto>> ListListsAsync(CancellationToken ct = default);
     Task<EdmListDto?> GetListAsync(Guid id, CancellationToken ct = default);
@@ -48,41 +48,23 @@ public class EdmListService : IEdmListService
         return senders.Select(EdmMapping.ToDto).ToList();
     }
 
-    public async Task<EdmSenderDto> SaveSenderAsync(Guid? id, EdmSenderWriteRequest data, CancellationToken ct = default)
+    public async Task<EdmSenderDto?> UpdateSenderBrandingAsync(Guid id, EdmSenderBrandingRequest data, CancellationToken ct = default)
     {
-        var name = EdmText.Required(data.Name, "Name", 100);
-        var from = EdmText.NormaliseEmail(data.FromAddress) ?? throw new EdmValidationException("From address isn't a valid email");
-        var replyTo = string.IsNullOrWhiteSpace(data.ReplyTo)
-            ? null
-            : EdmText.NormaliseEmail(data.ReplyTo) ?? throw new EdmValidationException("Reply-to isn't a valid email");
+        var sender = await _context.EdmSenders.FirstOrDefaultAsync(s => s.Id == id, ct);
+        if (sender is null) return null;
+
         var colour = data.BrandColour.Trim();
         if (!HexColour.IsMatch(colour)) throw new EdmValidationException("Brand colour must be a hex colour like #702f8f");
-        var footer = EdmText.Required(data.FooterText, "Footer text", 500);
         var logo = string.IsNullOrWhiteSpace(data.LogoUrl) ? null : data.LogoUrl.Trim();
         if (logo is not null && !logo.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
             throw new EdmValidationException("Logo must be an https:// image URL");
 
-        if (await _context.EdmSenders.AnyAsync(s => s.FromAddress == from && s.Id != id, ct))
-            throw new EdmValidationException("Another sender already uses that address");
-
-        EdmSender sender;
-        if (id is { } existingId)
-        {
-            sender = await _context.EdmSenders.FirstOrDefaultAsync(s => s.Id == existingId, ct)
-                ?? throw new EdmValidationException("Sender not found");
-        }
-        else
-        {
-            sender = new EdmSender { Id = Guid.NewGuid(), Name = name, FromAddress = from, BrandColour = colour, FooterText = footer, CreatedAt = DateTime.UtcNow };
-            _context.EdmSenders.Add(sender);
-        }
-
-        sender.Name = name;
-        sender.FromAddress = from;
-        sender.ReplyTo = replyTo;
+        sender.ReplyTo = string.IsNullOrWhiteSpace(data.ReplyTo)
+            ? null
+            : EdmText.NormaliseEmail(data.ReplyTo) ?? throw new EdmValidationException("Reply-to isn't a valid email");
         sender.BrandColour = colour.ToLowerInvariant();
         sender.LogoUrl = logo;
-        sender.FooterText = footer;
+        sender.FooterText = EdmText.Required(data.FooterText, "Footer text", 500);
         sender.UpdatedAt = DateTime.UtcNow;
         await _context.SaveChangesAsync(ct);
         return EdmMapping.ToDto(sender);
