@@ -11,6 +11,7 @@ using Panwar.Api.Infrastructure.CloudflareR2;
 using Panwar.Api.Services;
 using Panwar.Api.Services.Ai;
 using Panwar.Api.Services.Authorization;
+using Panwar.Api.Services.Edm;
 using Panwar.Api.Services.Import;
 using Panwar.Api.Services.Write;
 using Panwar.Api.Shared.Middleware;
@@ -81,6 +82,19 @@ var host = new HostBuilder()
             .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler { AllowAutoRedirect = false });
         services.AddScoped<IUrlCheckService, UrlCheckService>();
         services.AddScoped<ILinkService, LinkService>();
+
+        services.AddSingleton<IEdmMailSender, AcsEdmMailSender>();
+        services.AddSingleton<IEdmImageStore, EdmImageStore>();
+        services.AddScoped<IEdmSubscriptionService, EdmSubscriptionService>();
+        services.AddScoped<IEdmListService, EdmListService>();
+        services.AddScoped<EdmCampaignQueries>();
+        services.AddScoped<IEdmCampaignService, EdmCampaignService>();
+        services.AddScoped<IEdmSendService, EdmSendService>();
+        services.AddScoped<IEdmReportService, EdmReportService>();
+        services.AddScoped<IEdmTrackingService, EdmTrackingService>();
+        services.AddScoped<IEdmSendEngine, EdmSendEngine>();
+        services.AddHttpClient(EdmSyncService.HttpClientName, c => c.Timeout = TimeSpan.FromSeconds(60));
+        services.AddScoped<IEdmSyncService, EdmSyncService>();
 
         services.AddScoped<IPlacementWriteService, PlacementWriteService>();
         services.AddScoped<IEducationWriteService, EducationWriteService>();

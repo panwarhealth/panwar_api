@@ -26,6 +26,11 @@ public class RateLimitMiddleware : IFunctionsWorkerMiddleware
 
     private static readonly string[] AuthRoutes = { "/api/auth/magic-link" };
 
+    // eDM opens and one-click unsubscribes arrive via Gmail/Apple proxies, and delivery reports via
+    // Event Grid — a few shared IPs carrying thousands of legitimate requests. The ids in these
+    // routes are random Guids, so there is nothing to brute-force.
+    private static readonly string[] ExemptRoutes = { "/api/edm/o/", "/api/edm/u/", "/api/edm/events" };
+
     public async Task Invoke(FunctionContext context, FunctionExecutionDelegate next)
     {
         var requestData = await context.GetHttpRequestDataAsync();
@@ -35,9 +40,15 @@ public class RateLimitMiddleware : IFunctionsWorkerMiddleware
             return;
         }
 
+        var path = requestData.Url.AbsolutePath.ToLowerInvariant();
+        if (ExemptRoutes.Any(r => path.StartsWith(r, StringComparison.Ordinal)))
+        {
+            await next(context);
+            return;
+        }
+
         CleanupStaleEntries();
 
-        var path = requestData.Url.AbsolutePath.ToLowerInvariant();
         var ip = GetClientIp(requestData);
 
         string bucketKey;

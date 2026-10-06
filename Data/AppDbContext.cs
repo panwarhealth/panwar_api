@@ -49,6 +49,11 @@ public class AppDbContext : DbContext
     public DbSet<ImportNameAlias> ImportNameAliases { get; set; } = null!;
     public DbSet<TrackedLink> TrackedLinks { get; set; } = null!;
     public DbSet<QrCode> QrCodes { get; set; } = null!;
+    public DbSet<EdmSender> EdmSenders { get; set; } = null!;
+    public DbSet<EdmList> EdmLists { get; set; } = null!;
+    public DbSet<EdmContact> EdmContacts { get; set; } = null!;
+    public DbSet<EdmCampaign> EdmCampaigns { get; set; } = null!;
+    public DbSet<EdmRecipient> EdmRecipients { get; set; } = null!;
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -92,6 +97,93 @@ public class AppDbContext : DbContext
         ConfigureImportNameAlias(modelBuilder);
         ConfigureTrackedLink(modelBuilder);
         ConfigureQrCode(modelBuilder);
+        ConfigureEdm(modelBuilder);
+    }
+
+    private static void ConfigureEdm(ModelBuilder modelBuilder)
+    {
+        modelBuilder.Entity<EdmSender>(entity =>
+        {
+            entity.ToTable("edm_sender");
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Name).IsRequired().HasMaxLength(100);
+            entity.Property(e => e.FromAddress).IsRequired().HasMaxLength(254);
+            entity.Property(e => e.ReplyTo).HasMaxLength(254);
+            entity.Property(e => e.BrandColour).IsRequired().HasMaxLength(7);
+            entity.Property(e => e.LogoUrl).HasMaxLength(1000);
+            entity.Property(e => e.FooterText).IsRequired().HasMaxLength(500);
+            entity.Property(e => e.CreatedAt).HasDefaultValueSql("CURRENT_TIMESTAMP");
+            entity.Property(e => e.UpdatedAt).HasDefaultValueSql("CURRENT_TIMESTAMP");
+            entity.HasIndex(e => e.FromAddress).IsUnique();
+        });
+
+        modelBuilder.Entity<EdmList>(entity =>
+        {
+            entity.ToTable("edm_list");
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Name).IsRequired().HasMaxLength(150);
+            entity.Property(e => e.Kind).HasConversion<int>();
+            entity.Property(e => e.SyncSource).HasConversion<int?>();
+            entity.Property(e => e.LastSyncError).HasMaxLength(1000);
+            entity.Property(e => e.CreatedAt).HasDefaultValueSql("CURRENT_TIMESTAMP");
+            entity.Property(e => e.UpdatedAt).HasDefaultValueSql("CURRENT_TIMESTAMP");
+            entity.HasOne(e => e.Sender).WithMany().HasForeignKey(e => e.SenderId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(e => e.Creator).WithMany().HasForeignKey(e => e.CreatedBy).OnDelete(DeleteBehavior.Restrict);
+            entity.HasIndex(e => e.SyncSource).IsUnique().HasFilter("\"SyncSource\" IS NOT NULL");
+        });
+
+        modelBuilder.Entity<EdmContact>(entity =>
+        {
+            entity.ToTable("edm_contact");
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Email).IsRequired().HasMaxLength(254);
+            entity.Property(e => e.FirstName).HasMaxLength(100);
+            entity.Property(e => e.LastName).HasMaxLength(100);
+            entity.Property(e => e.ExternalId).HasMaxLength(100);
+            entity.Property(e => e.Status).HasConversion<int>();
+            entity.Property(e => e.CreatedAt).HasDefaultValueSql("CURRENT_TIMESTAMP");
+            entity.Property(e => e.UpdatedAt).HasDefaultValueSql("CURRENT_TIMESTAMP");
+            entity.HasOne(e => e.List).WithMany(l => l.Contacts).HasForeignKey(e => e.ListId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasIndex(e => new { e.ListId, e.Email }).IsUnique();
+            entity.HasIndex(e => e.Email);
+        });
+
+        modelBuilder.Entity<EdmCampaign>(entity =>
+        {
+            entity.ToTable("edm_campaign");
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Name).IsRequired().HasMaxLength(200);
+            entity.Property(e => e.CampaignCode).HasMaxLength(40);
+            entity.Property(e => e.FromName).HasMaxLength(100);
+            entity.Property(e => e.Subject).HasMaxLength(250);
+            entity.Property(e => e.PreviewText).HasMaxLength(250);
+            entity.Property(e => e.SourceFileName).HasMaxLength(255);
+            entity.Property(e => e.Status).HasConversion<int>();
+            entity.Property(e => e.CreatedAt).HasDefaultValueSql("CURRENT_TIMESTAMP");
+            entity.Property(e => e.UpdatedAt).HasDefaultValueSql("CURRENT_TIMESTAMP");
+            entity.HasOne(e => e.List).WithMany().HasForeignKey(e => e.ListId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(e => e.Sender).WithMany().HasForeignKey(e => e.SenderId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(e => e.Creator).WithMany().HasForeignKey(e => e.CreatedBy).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(e => e.SentByUser).WithMany().HasForeignKey(e => e.SentBy).OnDelete(DeleteBehavior.Restrict);
+            entity.HasIndex(e => new { e.Status, e.ScheduledFor });
+        });
+
+        modelBuilder.Entity<EdmRecipient>(entity =>
+        {
+            entity.ToTable("edm_recipient");
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Email).IsRequired().HasMaxLength(254);
+            entity.Property(e => e.FirstName).HasMaxLength(100);
+            entity.Property(e => e.LastName).HasMaxLength(100);
+            entity.Property(e => e.Status).HasConversion<int>();
+            entity.Property(e => e.MessageId).HasMaxLength(100);
+            entity.Property(e => e.Error).HasMaxLength(500);
+            entity.HasOne(e => e.Campaign).WithMany(c => c.Recipients).HasForeignKey(e => e.CampaignId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(e => e.Contact).WithMany().HasForeignKey(e => e.ContactId).OnDelete(DeleteBehavior.SetNull);
+            entity.HasIndex(e => new { e.CampaignId, e.Email }).IsUnique();
+            entity.HasIndex(e => new { e.CampaignId, e.Status });
+            entity.HasIndex(e => e.MessageId);
+        });
     }
 
     private static void ConfigureTrackedLink(ModelBuilder modelBuilder)

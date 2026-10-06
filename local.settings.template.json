@@ -25,6 +25,17 @@
         "CLOUDFLARE_R2_SECRET_KEY": "<FROM CLOUDFLARE R2 API TOKEN>",
         "CLOUDFLARE_R2_BUCKET": "panwar-portals-media",
 
+        "API_BASE_URL": "http://localhost:7071",
+        "ACS_EMAIL_CONNECTION_STRING": "<FROM Azure Communication Services resource > Keys>",
+        "EDM_R2_BUCKET": "edm-assets",
+        "EDM_R2_PUBLIC_BASE_URL": "https://cdn.panwarhealth.com.au",
+        "EDM_SEND_PER_MINUTE": "30",
+        "EDM_EVENTGRID_KEY": "<RUN: openssl rand -hex 24>",
+        "EDM_SYNC_PHARMACHAT_URL": "http://localhost:7072",
+        "EDM_SYNC_PHARMACHAT_KEY": "<SHARED KEY, same value as pharmachat_api EDM_SYNC_KEY>",
+        "EDM_SYNC_CLINICALSTUDIO_URL": "http://localhost:7073",
+        "EDM_SYNC_CLINICALSTUDIO_KEY": "<SHARED KEY, same value as LMS_api EDM_SYNC_KEY>",
+
         "ENTRA_TENANT_ID": "cf8d8b82-d1e1-44f7-a41a-941cfa7a82b1",
         "ENTRA_EMPLOYEE_SSO_CLIENT_ID": "479359b6-04f9-4471-9dd5-924e4365da7c",
         "ENTRA_CLIENT_SECRET": "<FROM app reg Certificates & secrets>",
