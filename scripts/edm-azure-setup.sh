@@ -117,11 +117,22 @@ configure() {
 events() {
   key=$(az functionapp config appsettings list -n "$API_APP" -g "$RG" --query "[?name=='EDM_EVENTGRID_KEY'].value | [0]" -o tsv)
   [ -n "$key" ] || { echo "Run 'configure' first."; exit 1; }
+  # A subscription never used Event Grid before needs the provider; Communication is re-registered after it.
+  for ns in Microsoft.EventGrid Microsoft.Communication; do az provider register --namespace "$ns" -o none; done
   acs_id=$(az communication show -n "$ACS" -g "$RG" --query id -o tsv)
-  az eventgrid event-subscription create --name edm-delivery-reports --source-resource-id "$acs_id" \
-    --endpoint "$API_BASE/api/edm/events?key=$key" \
-    --included-event-types Microsoft.Communication.EmailDeliveryReportReceived -o none
-  echo "Event Grid is sending delivery reports to $API_BASE/api/edm/events."
+  az eventgrid system-topic create -n "$ACS-events" -g "$RG" --location global     --topic-type Microsoft.Communication.CommunicationServices --source "$acs_id" -o none
+  # Straight after registering, this fails with "Failed to enable publisher notifications" for a
+  # few minutes while the providers propagate; retry until it takes.
+  for attempt in 1 2 3 4 5 6 7 8 9 10; do
+    if az eventgrid system-topic event-subscription create -n edm-delivery-reports -g "$RG" --system-topic-name "$ACS-events"       --endpoint "$API_BASE/api/edm/events?key=$key"       --included-event-types Microsoft.Communication.EmailDeliveryReportReceived -o none; then
+      echo "Event Grid is sending delivery reports to $API_BASE/api/edm/events."
+      return
+    fi
+    echo "Not ready yet (attempt $attempt); retrying in 2 minutes."
+    sleep 120
+  done
+  echo "Gave up; re-run 'events' later."
+  exit 1
 }
 
 case "${1:-}" in
