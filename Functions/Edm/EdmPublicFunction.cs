@@ -178,7 +178,7 @@ internal static class UnsubscribePage
     private static string Render(string brand, string colour, string? logo, string heading, string body, string action)
     {
         var mark = logo is null
-            ? $"<div class=\"badge\" style=\"background:{E(colour)}\">{E(brand)}</div>"
+            ? $"<div class=\"badge\" style=\"color:{E(colour)}\">{E(brand)}</div>"
             : $"<img class=\"logo\" src=\"{E(logo)}\" alt=\"{E(brand)}\">";
         return $$"""
             <!doctype html>
@@ -189,11 +189,11 @@ internal static class UnsubscribePage
             <style>
               body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;color:#454646;background:#fff}
               main{max-width:440px;margin:0 auto;padding:72px 24px;text-align:center}
-              .badge{display:inline-block;color:#fff;font-weight:700;font-size:20px;padding:12px 18px;border-radius:6px}
+              .badge{font-weight:600;font-size:20px;letter-spacing:.01em}
               .logo{max-height:56px;max-width:220px}
               h1{font-size:28px;margin:32px 0 12px}
               p{font-size:16px;line-height:1.55;color:#6b6b6b;margin:0 0 28px;overflow-wrap:anywhere}
-              .btn{border:0;color:#fff;font-size:16px;font-weight:600;padding:12px 28px;border-radius:4px;cursor:pointer}
+              .btn{border:0;color:#fff;font-size:16px;font-weight:400;padding:12px 28px;border-radius:4px;cursor:pointer}
               .link{border:0;background:none;color:#6b6b6b;font-size:16px;text-decoration:underline;cursor:pointer;padding:0}
               button:focus-visible{outline:3px solid #38c6f4;outline-offset:2px}
             </style></head>
