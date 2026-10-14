@@ -19,6 +19,10 @@ public static class EdmMessageBuilder
         RegexOptions.Compiled | RegexOptions.IgnoreCase);
 
     private static readonly Regex Mailchimp = new("\\*\\|(?<tag>FNAME|LNAME|EMAIL|UNSUB)\\|\\*", RegexOptions.Compiled);
+    private static readonly Regex UnsubscribeTag = new(
+        @"(?<attr>=\s*[""']\s*)?(?:\{\{\s*unsubscribe_url\s*(?:\|[^}]*)?\}\}|\*\|UNSUB\|\*)",
+        RegexOptions.Compiled | RegexOptions.IgnoreCase);
+
     private static readonly Regex BodyOpen = new("<body[^>]*>", RegexOptions.Compiled | RegexOptions.IgnoreCase);
     private static readonly Regex BodyClose = new("</body>", RegexOptions.Compiled | RegexOptions.IgnoreCase);
 
@@ -37,6 +41,7 @@ public static class EdmMessageBuilder
         var html = campaign.HtmlBody ?? "";
         var ownUnsubscribe = HasUnsubscribeTag(html);
 
+        html = LinkBareUnsubscribeTags(html, sender, p.UnsubscribeUrl);
         html = ReplaceTags(html, p, htmlEncode: true);
         html = InsertAfterBodyOpen(html, PreheaderHtml(campaign.PreviewText));
 
@@ -82,6 +87,11 @@ public static class EdmMessageBuilder
             _ => htmlEncode ? Attr(p.UnsubscribeUrl) : p.UnsubscribeUrl,
         });
     }
+
+    private static string LinkBareUnsubscribeTags(string html, EdmSender sender, string unsubscribeUrl) =>
+        UnsubscribeTag.Replace(html, m => m.Groups["attr"].Success
+            ? m.Groups["attr"].Value + Attr(unsubscribeUrl)
+            : $"<a href=\"{Attr(unsubscribeUrl)}\" style=\"color:{Attr(sender.BrandColour)};text-decoration:underline;\">Unsubscribe</a>");
 
     private static string PreheaderHtml(string? preview)
     {
