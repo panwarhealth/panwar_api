@@ -13,6 +13,7 @@ using Panwar.Api.Services.Ai;
 using Panwar.Api.Services.Authorization;
 using Panwar.Api.Services.Edm;
 using Panwar.Api.Services.Import;
+using Panwar.Api.Services.Timesheets;
 using Panwar.Api.Services.Write;
 using Panwar.Api.Shared.Middleware;
 
@@ -95,6 +96,23 @@ var host = new HostBuilder()
         services.AddScoped<IEdmSendEngine, EdmSendEngine>();
         services.AddHttpClient(EdmSyncService.HttpClientName, c => c.Timeout = TimeSpan.FromSeconds(60));
         services.AddScoped<IEdmSyncService, EdmSyncService>();
+
+        services.AddScoped<ITsViewerService, TsViewerService>();
+        services.AddScoped<ITsAccessService, TsAccessService>();
+        services.AddScoped<ITsBudgetAlertService, TsBudgetAlertService>();
+        services.AddScoped<ITrelloService, TrelloService>();
+        services.AddScoped<ITsTimeService, TsTimeService>();
+        services.AddScoped<ITsJobService, TsJobService>();
+        services.AddScoped<ITsClientService, TsClientService>();
+        services.AddScoped<ITsTaskService, TsTaskService>();
+        services.AddScoped<ITsPeopleService, TsPeopleService>();
+        services.AddScoped<ITsTeamService, TsTeamService>();
+        services.AddScoped<ITsScheduleService, TsScheduleService>();
+        services.AddScoped<ITsReportService, TsReportService>();
+        services.AddSingleton<ITsReportExporter, TsReportExporter>();
+        services.AddScoped<ITsSavedReportService, TsSavedReportService>();
+        services.AddHttpClient(TsImportService.HttpClientName, c => c.Timeout = TimeSpan.FromMinutes(2));
+        services.AddScoped<ITsImportService, TsImportService>();
 
         services.AddScoped<IPlacementWriteService, PlacementWriteService>();
         services.AddScoped<IEducationWriteService, EducationWriteService>();

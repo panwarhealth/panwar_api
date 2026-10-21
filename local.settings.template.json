@@ -41,7 +41,15 @@
         "ENTRA_CLIENT_SECRET": "<FROM app reg Certificates & secrets>",
         "ENTRA_CLIENT_SECRET_EXPIRY": "2028-04-13",
         "SHAREPOINT_SITE_ID": "panwarhealth.sharepoint.com,bb1dc030-29a3-4095-bff5-aebfee9c8397,7a5392ee-12f9-45b3-a6ee-c4dd04333675",
-        "SHAREPOINT_JOBS_PATH": "Panwar Health Active"
+        "SHAREPOINT_JOBS_PATH": "Panwar Health Active",
+        "TIMESHEETS_ALERT_EMAILS": "<comma-separated, always get budget alerts>",
+        "TRELLO_API_KEY": "<FROM trello.com/power-ups/admin>",
+        "TRELLO_TOKEN": "<FROM trello.com/power-ups/admin>",
+        "TRELLO_LIST_ID": "<TO BE BRIEFED list id>",
+        "TRELLO_TEMPLATE_CARD_ID": "<JOB CARD TEMPLATE card id>",
+        "HARVEST_ACCOUNT_ID": "957924",
+        "HARVEST_TOKEN": "<Harvest personal access token, switch-over only>",
+        "FORECAST_ACCOUNT_ID": "1906309"
     },
     "Host": {
         "CORS": "http://localhost:5173,http://localhost:5174,https://portal.panwarhealth.com.au,https://staff.panwarhealth.com.au",

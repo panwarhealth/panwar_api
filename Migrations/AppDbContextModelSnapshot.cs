@@ -1854,6 +1854,467 @@ namespace Panwar.Api.Migrations
                     b.ToTable("tracked_link", "panwar_portals");
                 });
 
+            modelBuilder.Entity("Panwar.Api.Models.TsBooking", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasDefaultValueSql("CURRENT_TIMESTAMP");
+
+                    b.Property<DateOnly>("EndDate")
+                        .HasColumnType("date");
+
+                    b.Property<long?>("ForecastId")
+                        .HasColumnType("bigint");
+
+                    b.Property<decimal>("HoursPerDay")
+                        .HasPrecision(5, 2)
+                        .HasColumnType("numeric(5,2)");
+
+                    b.Property<Guid>("JobId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Note")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<Guid>("PersonId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateOnly>("StartDate")
+                        .HasColumnType("date");
+
+                    b.Property<Guid?>("TaskId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasDefaultValueSql("CURRENT_TIMESTAMP");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ForecastId")
+                        .IsUnique();
+
+                    b.HasIndex("JobId");
+
+                    b.HasIndex("PersonId");
+
+                    b.HasIndex("TaskId");
+
+                    b.HasIndex("StartDate", "EndDate");
+
+                    b.ToTable("ts_booking", "panwar_portals");
+                });
+
+            modelBuilder.Entity("Panwar.Api.Models.TsCapacityChange", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateOnly>("Date")
+                        .HasColumnType("date");
+
+                    b.Property<decimal>("Hours")
+                        .HasPrecision(5, 2)
+                        .HasColumnType("numeric(5,2)");
+
+                    b.Property<string>("Note")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<Guid>("PersonId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("PersonId", "Date")
+                        .IsUnique();
+
+                    b.ToTable("ts_capacity_change", "panwar_portals");
+                });
+
+            modelBuilder.Entity("Panwar.Api.Models.TsClient", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<bool>("Archived")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("CodePrefix")
+                        .HasMaxLength(10)
+                        .HasColumnType("character varying(10)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasDefaultValueSql("CURRENT_TIMESTAMP");
+
+                    b.Property<long?>("HarvestId")
+                        .HasColumnType("bigint");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<bool>("SuppliesOwnCodes")
+                        .HasColumnType("boolean");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasDefaultValueSql("CURRENT_TIMESTAMP");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("HarvestId")
+                        .IsUnique();
+
+                    b.ToTable("ts_client", "panwar_portals");
+                });
+
+            modelBuilder.Entity("Panwar.Api.Models.TsEntry", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasDefaultValueSql("CURRENT_TIMESTAMP");
+
+                    b.Property<DateOnly>("Date")
+                        .HasColumnType("date");
+
+                    b.Property<long?>("HarvestId")
+                        .HasColumnType("bigint");
+
+                    b.Property<decimal>("Hours")
+                        .HasPrecision(9, 2)
+                        .HasColumnType("numeric(9,2)");
+
+                    b.Property<Guid>("JobId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Notes")
+                        .IsRequired()
+                        .HasMaxLength(4000)
+                        .HasColumnType("character varying(4000)");
+
+                    b.Property<Guid>("PersonId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("TaskId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime?>("TimerStartedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasDefaultValueSql("CURRENT_TIMESTAMP");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Date");
+
+                    b.HasIndex("HarvestId")
+                        .IsUnique();
+
+                    b.HasIndex("TaskId");
+
+                    b.HasIndex("JobId", "Date");
+
+                    b.HasIndex("PersonId", "Date");
+
+                    b.ToTable("ts_entry", "panwar_portals");
+                });
+
+            modelBuilder.Entity("Panwar.Api.Models.TsJob", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<int?>("AlertPercent")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime?>("AlertSentAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<bool>("Archived")
+                        .HasColumnType("boolean");
+
+                    b.Property<Guid>("ClientId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Code")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasDefaultValueSql("CURRENT_TIMESTAMP");
+
+                    b.Property<bool>("Everyone")
+                        .HasColumnType("boolean");
+
+                    b.Property<long?>("HarvestId")
+                        .HasColumnType("bigint");
+
+                    b.Property<bool>("IsLeave")
+                        .HasColumnType("boolean");
+
+                    b.Property<DateOnly>("OpenedOn")
+                        .HasColumnType("date");
+
+                    b.Property<string>("Title")
+                        .IsRequired()
+                        .HasMaxLength(300)
+                        .HasColumnType("character varying(300)");
+
+                    b.Property<string>("TrelloCardUrl")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasDefaultValueSql("CURRENT_TIMESTAMP");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ClientId");
+
+                    b.HasIndex("Code");
+
+                    b.HasIndex("HarvestId")
+                        .IsUnique();
+
+                    b.ToTable("ts_job", "panwar_portals");
+                });
+
+            modelBuilder.Entity("Panwar.Api.Models.TsJobPerson", b =>
+                {
+                    b.Property<Guid>("JobId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("PersonId")
+                        .HasColumnType("uuid");
+
+                    b.Property<bool>("IsManager")
+                        .HasColumnType("boolean");
+
+                    b.HasKey("JobId", "PersonId");
+
+                    b.HasIndex("PersonId");
+
+                    b.ToTable("ts_job_person", "panwar_portals");
+                });
+
+            modelBuilder.Entity("Panwar.Api.Models.TsJobTask", b =>
+                {
+                    b.Property<Guid>("JobId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("TaskId")
+                        .HasColumnType("uuid");
+
+                    b.Property<decimal?>("BudgetHours")
+                        .HasPrecision(9, 2)
+                        .HasColumnType("numeric(9,2)");
+
+                    b.HasKey("JobId", "TaskId");
+
+                    b.HasIndex("TaskId");
+
+                    b.ToTable("ts_job_task", "panwar_portals");
+                });
+
+            modelBuilder.Entity("Panwar.Api.Models.TsPerson", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<bool>("Archived")
+                        .HasColumnType("boolean");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasDefaultValueSql("CURRENT_TIMESTAMP");
+
+                    b.PrimitiveCollection<decimal[]>("DayHours")
+                        .IsRequired()
+                        .HasColumnType("numeric(5,2)[]");
+
+                    b.Property<string>("Email")
+                        .HasMaxLength(254)
+                        .HasColumnType("character varying(254)");
+
+                    b.Property<string>("FirstName")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<long?>("ForecastId")
+                        .HasColumnType("bigint");
+
+                    b.Property<long?>("HarvestId")
+                        .HasColumnType("bigint");
+
+                    b.Property<bool>("IsContractor")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("IsPlaceholder")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("LastName")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("Title")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasDefaultValueSql("CURRENT_TIMESTAMP");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Email")
+                        .IsUnique();
+
+                    b.HasIndex("ForecastId")
+                        .IsUnique();
+
+                    b.HasIndex("HarvestId")
+                        .IsUnique();
+
+                    b.ToTable("ts_person", "panwar_portals");
+                });
+
+            modelBuilder.Entity("Panwar.Api.Models.TsPersonManager", b =>
+                {
+                    b.Property<Guid>("ManagerId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("PersonId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("ManagerId", "PersonId");
+
+                    b.HasIndex("PersonId");
+
+                    b.ToTable("ts_person_manager", "panwar_portals");
+                });
+
+            modelBuilder.Entity("Panwar.Api.Models.TsSavedReport", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasDefaultValueSql("CURRENT_TIMESTAMP");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<Guid>("PersonId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Query")
+                        .IsRequired()
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("PersonId");
+
+                    b.ToTable("ts_saved_report", "panwar_portals");
+                });
+
+            modelBuilder.Entity("Panwar.Api.Models.TsStar", b =>
+                {
+                    b.Property<Guid>("PersonId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("JobId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("TaskId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("PersonId", "JobId", "TaskId");
+
+                    b.HasIndex("JobId");
+
+                    b.HasIndex("TaskId");
+
+                    b.ToTable("ts_star", "panwar_portals");
+                });
+
+            modelBuilder.Entity("Panwar.Api.Models.TsTask", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<bool>("Archived")
+                        .HasColumnType("boolean");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasDefaultValueSql("CURRENT_TIMESTAMP");
+
+                    b.Property<long?>("HarvestId")
+                        .HasColumnType("bigint");
+
+                    b.Property<bool>("IsCommon")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasDefaultValueSql("CURRENT_TIMESTAMP");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("HarvestId")
+                        .IsUnique();
+
+                    b.ToTable("ts_task", "panwar_portals");
+                });
+
             modelBuilder.Entity("Panwar.Api.Models.UserClient", b =>
                 {
                     b.Property<Guid>("Id")
@@ -2473,6 +2934,174 @@ namespace Panwar.Api.Migrations
                     b.Navigation("Creator");
                 });
 
+            modelBuilder.Entity("Panwar.Api.Models.TsBooking", b =>
+                {
+                    b.HasOne("Panwar.Api.Models.TsJob", "Job")
+                        .WithMany()
+                        .HasForeignKey("JobId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("Panwar.Api.Models.TsPerson", "Person")
+                        .WithMany()
+                        .HasForeignKey("PersonId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("Panwar.Api.Models.TsTask", "Task")
+                        .WithMany()
+                        .HasForeignKey("TaskId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.Navigation("Job");
+
+                    b.Navigation("Person");
+
+                    b.Navigation("Task");
+                });
+
+            modelBuilder.Entity("Panwar.Api.Models.TsCapacityChange", b =>
+                {
+                    b.HasOne("Panwar.Api.Models.TsPerson", "Person")
+                        .WithMany("CapacityChanges")
+                        .HasForeignKey("PersonId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Person");
+                });
+
+            modelBuilder.Entity("Panwar.Api.Models.TsEntry", b =>
+                {
+                    b.HasOne("Panwar.Api.Models.TsJob", "Job")
+                        .WithMany()
+                        .HasForeignKey("JobId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Panwar.Api.Models.TsPerson", "Person")
+                        .WithMany()
+                        .HasForeignKey("PersonId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Panwar.Api.Models.TsTask", "Task")
+                        .WithMany()
+                        .HasForeignKey("TaskId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Job");
+
+                    b.Navigation("Person");
+
+                    b.Navigation("Task");
+                });
+
+            modelBuilder.Entity("Panwar.Api.Models.TsJob", b =>
+                {
+                    b.HasOne("Panwar.Api.Models.TsClient", "Client")
+                        .WithMany("Jobs")
+                        .HasForeignKey("ClientId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Client");
+                });
+
+            modelBuilder.Entity("Panwar.Api.Models.TsJobPerson", b =>
+                {
+                    b.HasOne("Panwar.Api.Models.TsJob", "Job")
+                        .WithMany("People")
+                        .HasForeignKey("JobId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("Panwar.Api.Models.TsPerson", "Person")
+                        .WithMany()
+                        .HasForeignKey("PersonId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Job");
+
+                    b.Navigation("Person");
+                });
+
+            modelBuilder.Entity("Panwar.Api.Models.TsJobTask", b =>
+                {
+                    b.HasOne("Panwar.Api.Models.TsJob", "Job")
+                        .WithMany("Tasks")
+                        .HasForeignKey("JobId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("Panwar.Api.Models.TsTask", "Task")
+                        .WithMany()
+                        .HasForeignKey("TaskId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Job");
+
+                    b.Navigation("Task");
+                });
+
+            modelBuilder.Entity("Panwar.Api.Models.TsPersonManager", b =>
+                {
+                    b.HasOne("Panwar.Api.Models.TsPerson", "Manager")
+                        .WithMany("Manages")
+                        .HasForeignKey("ManagerId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("Panwar.Api.Models.TsPerson", "Person")
+                        .WithMany()
+                        .HasForeignKey("PersonId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Manager");
+
+                    b.Navigation("Person");
+                });
+
+            modelBuilder.Entity("Panwar.Api.Models.TsSavedReport", b =>
+                {
+                    b.HasOne("Panwar.Api.Models.TsPerson", "Person")
+                        .WithMany()
+                        .HasForeignKey("PersonId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Person");
+                });
+
+            modelBuilder.Entity("Panwar.Api.Models.TsStar", b =>
+                {
+                    b.HasOne("Panwar.Api.Models.TsJob", "Job")
+                        .WithMany()
+                        .HasForeignKey("JobId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("Panwar.Api.Models.TsPerson", null)
+                        .WithMany()
+                        .HasForeignKey("PersonId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("Panwar.Api.Models.TsTask", "Task")
+                        .WithMany()
+                        .HasForeignKey("TaskId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Job");
+
+                    b.Navigation("Task");
+                });
+
             modelBuilder.Entity("Panwar.Api.Models.UserClient", b =>
                 {
                     b.HasOne("Panwar.Api.Models.Client", "Client")
@@ -2630,6 +3259,25 @@ namespace Panwar.Api.Migrations
             modelBuilder.Entity("Panwar.Api.Models.ReportInvite", b =>
                 {
                     b.Navigation("Events");
+                });
+
+            modelBuilder.Entity("Panwar.Api.Models.TsClient", b =>
+                {
+                    b.Navigation("Jobs");
+                });
+
+            modelBuilder.Entity("Panwar.Api.Models.TsJob", b =>
+                {
+                    b.Navigation("People");
+
+                    b.Navigation("Tasks");
+                });
+
+            modelBuilder.Entity("Panwar.Api.Models.TsPerson", b =>
+                {
+                    b.Navigation("CapacityChanges");
+
+                    b.Navigation("Manages");
                 });
 
             modelBuilder.Entity("Panwar.Api.Models.UtmLink", b =>

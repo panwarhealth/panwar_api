@@ -54,6 +54,18 @@ public class AppDbContext : DbContext
     public DbSet<EdmContact> EdmContacts { get; set; } = null!;
     public DbSet<EdmCampaign> EdmCampaigns { get; set; } = null!;
     public DbSet<EdmRecipient> EdmRecipients { get; set; } = null!;
+    public DbSet<TsClient> TsClients { get; set; } = null!;
+    public DbSet<TsTask> TsTasks { get; set; } = null!;
+    public DbSet<TsJob> TsJobs { get; set; } = null!;
+    public DbSet<TsJobTask> TsJobTasks { get; set; } = null!;
+    public DbSet<TsJobPerson> TsJobPeople { get; set; } = null!;
+    public DbSet<TsPerson> TsPeople { get; set; } = null!;
+    public DbSet<TsCapacityChange> TsCapacityChanges { get; set; } = null!;
+    public DbSet<TsEntry> TsEntries { get; set; } = null!;
+    public DbSet<TsStar> TsStars { get; set; } = null!;
+    public DbSet<TsBooking> TsBookings { get; set; } = null!;
+    public DbSet<TsSavedReport> TsSavedReports { get; set; } = null!;
+    public DbSet<TsPersonManager> TsPersonManagers { get; set; } = null!;
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -98,7 +110,149 @@ public class AppDbContext : DbContext
         ConfigureTrackedLink(modelBuilder);
         ConfigureQrCode(modelBuilder);
         ConfigureEdm(modelBuilder);
+        ConfigureTimesheets(modelBuilder);
     }
+
+    private static void ConfigureTimesheets(ModelBuilder modelBuilder)
+    {
+        modelBuilder.Entity<TsClient>(entity =>
+        {
+            entity.ToTable("ts_client");
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Name).IsRequired().HasMaxLength(200);
+            entity.Property(e => e.CodePrefix).HasMaxLength(10);
+            entity.Property(e => e.CreatedAt).HasDefaultValueSql("CURRENT_TIMESTAMP");
+            entity.Property(e => e.UpdatedAt).HasDefaultValueSql("CURRENT_TIMESTAMP");
+            entity.HasIndex(e => e.HarvestId).IsUnique();
+        });
+
+        modelBuilder.Entity<TsTask>(entity =>
+        {
+            entity.ToTable("ts_task");
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Name).IsRequired().HasMaxLength(200);
+            entity.Property(e => e.CreatedAt).HasDefaultValueSql("CURRENT_TIMESTAMP");
+            entity.Property(e => e.UpdatedAt).HasDefaultValueSql("CURRENT_TIMESTAMP");
+            entity.HasIndex(e => e.HarvestId).IsUnique();
+        });
+
+        modelBuilder.Entity<TsJob>(entity =>
+        {
+            entity.ToTable("ts_job");
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Code).IsRequired().HasMaxLength(40);
+            entity.Property(e => e.Title).IsRequired().HasMaxLength(300);
+            entity.Property(e => e.TrelloCardUrl).HasMaxLength(500);
+            entity.Property(e => e.CreatedAt).HasDefaultValueSql("CURRENT_TIMESTAMP");
+            entity.Property(e => e.UpdatedAt).HasDefaultValueSql("CURRENT_TIMESTAMP");
+            entity.HasOne(e => e.Client).WithMany(c => c.Jobs).HasForeignKey(e => e.ClientId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasIndex(e => e.Code);
+            entity.HasIndex(e => e.HarvestId).IsUnique();
+        });
+
+        modelBuilder.Entity<TsJobTask>(entity =>
+        {
+            entity.ToTable("ts_job_task");
+            entity.HasKey(e => new { e.JobId, e.TaskId });
+            entity.Property(e => e.BudgetHours).HasPrecision(9, 2);
+            entity.HasOne(e => e.Job).WithMany(j => j.Tasks).HasForeignKey(e => e.JobId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(e => e.Task).WithMany().HasForeignKey(e => e.TaskId).OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<TsJobPerson>(entity =>
+        {
+            entity.ToTable("ts_job_person");
+            entity.HasKey(e => new { e.JobId, e.PersonId });
+            entity.HasOne(e => e.Job).WithMany(j => j.People).HasForeignKey(e => e.JobId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(e => e.Person).WithMany().HasForeignKey(e => e.PersonId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<TsPerson>(entity =>
+        {
+            entity.ToTable("ts_person");
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.FirstName).IsRequired().HasMaxLength(100);
+            entity.Property(e => e.LastName).IsRequired().HasMaxLength(100);
+            entity.Property(e => e.Email).HasMaxLength(254);
+            entity.Property(e => e.Title).HasMaxLength(200);
+            entity.Property(e => e.DayHours).HasColumnType("numeric(5,2)[]");
+            entity.Property(e => e.CreatedAt).HasDefaultValueSql("CURRENT_TIMESTAMP");
+            entity.Property(e => e.UpdatedAt).HasDefaultValueSql("CURRENT_TIMESTAMP");
+            entity.HasIndex(e => e.Email).IsUnique();
+            entity.HasIndex(e => e.HarvestId).IsUnique();
+            entity.HasIndex(e => e.ForecastId).IsUnique();
+        });
+
+        modelBuilder.Entity<TsCapacityChange>(entity =>
+        {
+            entity.ToTable("ts_capacity_change");
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Hours).HasPrecision(5, 2);
+            entity.Property(e => e.Note).HasMaxLength(200);
+            entity.HasOne(e => e.Person).WithMany(p => p.CapacityChanges).HasForeignKey(e => e.PersonId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasIndex(e => new { e.PersonId, e.Date }).IsUnique();
+        });
+
+        modelBuilder.Entity<TsEntry>(entity =>
+        {
+            entity.ToTable("ts_entry");
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Hours).HasPrecision(9, 2);
+            entity.Property(e => e.Notes).IsRequired().HasMaxLength(4000);
+            entity.Property(e => e.CreatedAt).HasDefaultValueSql("CURRENT_TIMESTAMP");
+            entity.Property(e => e.UpdatedAt).HasDefaultValueSql("CURRENT_TIMESTAMP");
+            entity.HasOne(e => e.Person).WithMany().HasForeignKey(e => e.PersonId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(e => e.Job).WithMany().HasForeignKey(e => e.JobId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(e => e.Task).WithMany().HasForeignKey(e => e.TaskId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasIndex(e => new { e.PersonId, e.Date });
+            entity.HasIndex(e => new { e.JobId, e.Date });
+            entity.HasIndex(e => e.Date);
+            entity.HasIndex(e => e.HarvestId).IsUnique();
+        });
+
+        modelBuilder.Entity<TsStar>(entity =>
+        {
+            entity.ToTable("ts_star");
+            entity.HasKey(e => new { e.PersonId, e.JobId, e.TaskId });
+            entity.HasOne<TsPerson>().WithMany().HasForeignKey(e => e.PersonId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(e => e.Job).WithMany().HasForeignKey(e => e.JobId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(e => e.Task).WithMany().HasForeignKey(e => e.TaskId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<TsBooking>(entity =>
+        {
+            entity.ToTable("ts_booking");
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.HoursPerDay).HasPrecision(5, 2);
+            entity.Property(e => e.Note).HasMaxLength(500);
+            entity.Property(e => e.CreatedAt).HasDefaultValueSql("CURRENT_TIMESTAMP");
+            entity.Property(e => e.UpdatedAt).HasDefaultValueSql("CURRENT_TIMESTAMP");
+            entity.HasOne(e => e.Person).WithMany().HasForeignKey(e => e.PersonId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(e => e.Job).WithMany().HasForeignKey(e => e.JobId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(e => e.Task).WithMany().HasForeignKey(e => e.TaskId).OnDelete(DeleteBehavior.SetNull);
+            entity.HasIndex(e => new { e.StartDate, e.EndDate });
+            entity.HasIndex(e => e.ForecastId).IsUnique();
+        });
+
+        modelBuilder.Entity<TsPersonManager>(entity =>
+        {
+            entity.ToTable("ts_person_manager");
+            entity.HasKey(e => new { e.ManagerId, e.PersonId });
+            entity.HasOne(e => e.Manager).WithMany(p => p.Manages).HasForeignKey(e => e.ManagerId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(e => e.Person).WithMany().HasForeignKey(e => e.PersonId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<TsSavedReport>(entity =>
+        {
+            entity.ToTable("ts_saved_report");
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Name).IsRequired().HasMaxLength(200);
+            entity.Property(e => e.Query).IsRequired().HasMaxLength(2000);
+            entity.Property(e => e.CreatedAt).HasDefaultValueSql("CURRENT_TIMESTAMP");
+            entity.HasOne(e => e.Person).WithMany().HasForeignKey(e => e.PersonId).OnDelete(DeleteBehavior.Cascade);
+        });
+    }
+
 
     private static void ConfigureEdm(ModelBuilder modelBuilder)
     {
