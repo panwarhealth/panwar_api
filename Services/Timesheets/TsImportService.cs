@@ -262,12 +262,14 @@ public class TsImportService : ITsImportService
         IReadOnlyDictionary<long, Guid> jobIds, IReadOnlyDictionary<long, Guid> taskIds, CancellationToken cancellationToken)
     {
         var count = 0;
+        var seen = new List<long>();
         string? url = "time_entries?per_page=2000";
         while (url is not null)
         {
             var page = await GetAsync<HvPage<HvEntry>>(http, url, cancellationToken);
             var items = page.Items("time_entries");
             var pageIds = items.Select(e => e.Id).ToList();
+            seen.AddRange(pageIds);
             var existing = await _context.TsEntries.Where(e => pageIds.Contains(e.HarvestId!.Value)).ToDictionaryAsync(e => e.HarvestId!.Value, cancellationToken);
             foreach (var e in items)
             {
@@ -292,6 +294,10 @@ public class TsImportService : ITsImportService
             _logger.LogInformation("Imported {Count} Harvest time entries", count);
             url = page.Links.Next is { } next ? next[HarvestUrl.Length..] : null;
         }
+        var removed = await _context.TsEntries
+            .Where(x => x.HarvestId != null && !seen.Contains(x.HarvestId.Value))
+            .ExecuteDeleteAsync(cancellationToken);
+        _logger.LogInformation("Removed {Count} time entries deleted in Harvest", removed);
         return count;
     }
 
