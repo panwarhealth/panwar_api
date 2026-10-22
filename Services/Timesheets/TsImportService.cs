@@ -128,6 +128,7 @@ public class TsImportService : ITsImportService
                 person = new TsPerson { Id = Guid.NewGuid(), FirstName = fp.FirstName.Trim(), LastName = fp.LastName.Trim(), IsPlaceholder = true, CreatedAt = DateTime.UtcNow };
                 _context.TsPeople.Add(person);
             }
+            if (!fp.Archived) person.Archived = false;
             if (person.IsPlaceholder)
             {
                 person.Title = fp.Roles.Count == 0 ? null : string.Join(", ", fp.Roles);
@@ -169,6 +170,10 @@ public class TsImportService : ITsImportService
             all.AddRange((await GetAsync<FcAssignments>(http, $"assignments?start_date={chunk:yyyy-MM-dd}&end_date={chunkEnd:yyyy-MM-dd}", cancellationToken)).Assignments);
         }
         all = all.DistinctBy(a => a.Id).ToList();
+
+        var forecastClients = (await GetAsync<FcClients>(http, "clients", cancellationToken)).Clients.ToDictionary(c => c.Id);
+        foreach (var fp in projects.Where(p => !jobIds.ContainsKey(p.Id) && p.ClientId is not null && all.Any(a => a.ProjectId == p.Id)))
+            jobIds[fp.Id] = await AddForecastJobAsync(fp, forecastClients[fp.ClientId!.Value], cancellationToken);
         var assignments = all
             .Where(a => a.PersonId is { } pid && personIds.ContainsKey(pid) && jobIds.ContainsKey(a.ProjectId) && (a.Allocation ?? fullDay[pid]) > 0)
             .ToList();
@@ -200,6 +205,36 @@ public class TsImportService : ITsImportService
             .ExecuteDeleteAsync(cancellationToken);
         _logger.LogInformation("Removed {Count} bookings deleted in Forecast", removed);
         return new TsImportResultDto(0, 0, personIds.Count, jobIds.Count, 0, assignments.Count);
+    }
+
+    private async Task<Guid> AddForecastJobAsync(FcProject project, FcClient forecastClient, CancellationToken cancellationToken)
+    {
+        var name = forecastClient.Name.Trim();
+        var clientId = forecastClient.HarvestId is { } harvestId
+            ? await _context.TsClients.Where(c => c.HarvestId == harvestId).Select(c => (Guid?)c.Id).FirstOrDefaultAsync(cancellationToken)
+            : null;
+        clientId ??= await _context.TsClients.Where(c => c.Name.ToUpper() == name.ToUpper()).Select(c => (Guid?)c.Id).FirstOrDefaultAsync(cancellationToken);
+        if (clientId is null)
+        {
+            var client = new TsClient { Id = Guid.NewGuid(), Name = name, CreatedAt = DateTime.UtcNow, UpdatedAt = DateTime.UtcNow };
+            _context.TsClients.Add(client);
+            clientId = client.Id;
+        }
+
+        var job = new TsJob
+        {
+            Id = Guid.NewGuid(),
+            ClientId = clientId.Value,
+            Code = (project.Code ?? "").Trim(),
+            Title = project.Name.Trim(),
+            Archived = project.Archived,
+            OpenedOn = TsCalendar.Today,
+            CreatedAt = DateTime.UtcNow,
+            UpdatedAt = DateTime.UtcNow
+        };
+        _context.TsJobs.Add(job);
+        await _context.SaveChangesAsync(cancellationToken);
+        return job.Id;
     }
 
     private async Task<Dictionary<long, Guid>> UpsertPeopleAsync(IReadOnlyList<HvUser> users, CancellationToken cancellationToken)
@@ -435,7 +470,9 @@ public class TsImportService : ITsImportService
     }
 
     private sealed class FcProjects { public List<FcProject> Projects { get; set; } = []; }
-    private sealed class FcProject { public long Id { get; set; } public string Name { get; set; } = ""; public string? Code { get; set; } public long? HarvestId { get; set; } }
+    private sealed class FcProject { public long Id { get; set; } public string Name { get; set; } = ""; public string? Code { get; set; } public long? HarvestId { get; set; } public long? ClientId { get; set; } public bool Archived { get; set; } }
+    private sealed class FcClients { public List<FcClient> Clients { get; set; } = []; }
+    private sealed class FcClient { public long Id { get; set; } public string Name { get; set; } = ""; public long? HarvestId { get; set; } }
     private sealed class FcAssignments { public List<FcAssignment> Assignments { get; set; } = []; }
 
     private sealed class FcAssignment
