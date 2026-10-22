@@ -181,6 +181,8 @@ public class AppDbContext : DbContext
             entity.HasIndex(e => e.Email).IsUnique();
             entity.HasIndex(e => e.HarvestId).IsUnique();
             entity.HasIndex(e => e.ForecastId).IsUnique();
+            entity.Property(e => e.CalendarToken).HasMaxLength(64);
+            entity.HasIndex(e => e.CalendarToken).IsUnique();
         });
 
         modelBuilder.Entity<TsCapacityChange>(entity =>

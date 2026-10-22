@@ -13,6 +13,7 @@ public class TsPerson
     public decimal[] DayHours { get; set; } = [];
     public long? HarvestId { get; set; }
     public long? ForecastId { get; set; }
+    public string? CalendarToken { get; set; }
     public DateTime CreatedAt { get; set; }
     public DateTime UpdatedAt { get; set; }
 

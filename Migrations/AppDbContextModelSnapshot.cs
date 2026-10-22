@@ -2166,6 +2166,10 @@ namespace Panwar.Api.Migrations
                     b.Property<bool>("Archived")
                         .HasColumnType("boolean");
 
+                    b.Property<string>("CalendarToken")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
                     b.Property<DateTime>("CreatedAt")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("timestamp with time zone")
@@ -2211,6 +2215,9 @@ namespace Panwar.Api.Migrations
                         .HasDefaultValueSql("CURRENT_TIMESTAMP");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("CalendarToken")
+                        .IsUnique();
 
                     b.HasIndex("Email")
                         .IsUnique();

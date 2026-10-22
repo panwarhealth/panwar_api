@@ -107,7 +107,7 @@ public class ManageInvitesFunction
             .ToListAsync(ct);
         if (members.Count == 0) return await BadRequest(req, "No valid recipients for this client");
 
-        var apiBase = ApiBase(req);
+        var apiBase = req.ApiBase(_configuration);
         var template = data.Template.Trim().ToLowerInvariant();
         var templateFile = TemplateFile(template);
         var periodLabel = PeriodLabel(data.Year, data.StartMonth, data.EndMonth);
@@ -390,21 +390,6 @@ public class ManageInvitesFunction
         return startMonth == endMonth
             ? $"{Name(startMonth.Value)} {year}"
             : $"{Name(startMonth.Value)} - {Name(endMonth.Value)} {year}";
-    }
-
-    // The email's tracked link points back at this API. Derive the public base from the
-    // request (custom domain / forwarded host) so no extra App Setting is needed; an
-    // optional API_BASE_URL override still wins if set.
-    private string ApiBase(HttpRequestData req)
-    {
-        var configured = _configuration["API_BASE_URL"];
-        if (!string.IsNullOrWhiteSpace(configured)) return configured.TrimEnd('/');
-
-        var host = req.Headers.TryGetValues("X-Forwarded-Host", out var h) ? h.FirstOrDefault()?.Split(',')[0].Trim() : null;
-        var proto = req.Headers.TryGetValues("X-Forwarded-Proto", out var p) ? p.FirstOrDefault()?.Split(',')[0].Trim() : null;
-        return !string.IsNullOrEmpty(host)
-            ? $"{(string.IsNullOrEmpty(proto) ? req.Url.Scheme : proto)}://{host}"
-            : req.Url.GetLeftPart(UriPartial.Authority);
     }
 
     private static string GenerateToken()

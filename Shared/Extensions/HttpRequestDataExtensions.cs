@@ -1,12 +1,25 @@
 using System.Net;
 using Microsoft.Azure.Functions.Worker;
 using Microsoft.Azure.Functions.Worker.Http;
+using Microsoft.Extensions.Configuration;
 using Panwar.Api.Models.Enums;
 
 namespace Panwar.Api.Shared.Extensions;
 
 public static class HttpRequestDataExtensions
 {
+    public static string ApiBase(this HttpRequestData req, IConfiguration configuration)
+    {
+        var configured = configuration["API_BASE_URL"];
+        if (!string.IsNullOrWhiteSpace(configured)) return configured.TrimEnd('/');
+
+        var host = req.Headers.TryGetValues("X-Forwarded-Host", out var h) ? h.FirstOrDefault()?.Split(',')[0].Trim() : null;
+        var proto = req.Headers.TryGetValues("X-Forwarded-Proto", out var p) ? p.FirstOrDefault()?.Split(',')[0].Trim() : null;
+        return !string.IsNullOrEmpty(host)
+            ? $"{(string.IsNullOrEmpty(proto) ? req.Url.Scheme : proto)}://{host}"
+            : req.Url.GetLeftPart(UriPartial.Authority);
+    }
+
     public static Guid? GetUserId(this HttpRequestData _, FunctionContext context)
         => context.Items.TryGetValue("UserId", out var v) ? v as Guid? : null;
 
