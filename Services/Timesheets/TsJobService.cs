@@ -48,7 +48,8 @@ public class TsJobService : ITsJobService
             .Select(j => new TsJobRowDto(
                 j.Id, j.Code, j.Title, j.ClientId, j.Client.Name,
                 _context.TsEntries.Where(e => e.JobId == j.Id).Sum(e => (decimal?)e.Hours) ?? 0,
-                j.Archived))
+                j.Archived,
+                j.IsLeave))
             .ToListAsync(cancellationToken);
     }
 

@@ -47,7 +47,7 @@ public class TsStarRequest
     public bool Starred { get; set; }
 }
 
-public sealed record TsJobRowDto(Guid Id, string Code, string Title, Guid ClientId, string ClientName, decimal Spent, bool Archived);
+public sealed record TsJobRowDto(Guid Id, string Code, string Title, Guid ClientId, string ClientName, decimal Spent, bool Archived, bool IsLeave);
 
 public sealed record TsJobTaskDto(Guid TaskId, string Name, decimal? Budget, decimal Spent);
 
@@ -206,6 +206,13 @@ public sealed record TsBookingDto(
     string? UpdatedByName);
 
 public sealed record TsScheduleDto(IReadOnlyList<TsSchedulePersonDto> People, IReadOnlyList<TsScheduleJobDto> Jobs, IReadOnlyList<TsBookingDto> Bookings);
+
+public sealed record TsJobHoursDto(Guid JobId, decimal Hours);
+
+public class TsShiftRequest
+{
+    public int Days { get; set; }
+}
 
 public class TsBookingMoveRequest
 {

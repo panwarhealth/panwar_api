@@ -46,6 +46,21 @@ public class TsScheduleFunction
             return await TsHttp.File(req, await _export.CsvAsync(request, ct), "text/csv", "schedule-export.csv");
         });
 
+    [Function("TsScheduleFutureHours")]
+    public Task<HttpResponseData> FutureHours(
+        [HttpTrigger(AuthorizationLevel.Anonymous, "get", Route = "ts/schedule/future-hours")] HttpRequestData req, FunctionContext context)
+        => TsHttp.Handle(req, context, _viewers, TsLevel.Manager, async (_, ct) =>
+            await TsHttp.Ok(req, new { jobs = await _schedule.FutureHoursAsync(ct) }));
+
+    [Function("TsShiftJobBookings")]
+    public Task<HttpResponseData> ShiftJob(
+        [HttpTrigger(AuthorizationLevel.Anonymous, "post", Route = "ts/schedule/jobs/{jobId:guid}/shift")] HttpRequestData req, FunctionContext context, Guid jobId)
+        => TsHttp.Handle(req, context, _viewers, TsLevel.Manager, async (viewer, ct) =>
+        {
+            var body = await TsHttp.Body<TsShiftRequest>(req);
+            return await TsHttp.Ok(req, new { moved = await _schedule.ShiftJobAsync(jobId, body.Days, viewer.PersonId, ct) });
+        });
+
     [Function("TsMoveBooking")]
     public Task<HttpResponseData> Move(
         [HttpTrigger(AuthorizationLevel.Anonymous, "put", Route = "ts/bookings/{bookingId:guid}/dates")] HttpRequestData req, FunctionContext context, Guid bookingId)

@@ -12,6 +12,8 @@ public interface ITsScheduleService
     Task<TsBookingDto> CreateAsync(TsBookingWriteRequest data, Guid byPersonId, CancellationToken cancellationToken = default);
     Task<TsBookingDto?> UpdateAsync(Guid bookingId, TsBookingWriteRequest data, Guid byPersonId, CancellationToken cancellationToken = default);
     Task<bool> DeleteAsync(Guid bookingId, bool following, CancellationToken cancellationToken = default);
+    Task<IReadOnlyList<TsJobHoursDto>> FutureHoursAsync(CancellationToken cancellationToken = default);
+    Task<int> ShiftJobAsync(Guid jobId, int days, Guid byPersonId, CancellationToken cancellationToken = default);
     Task<TsBookingDto?> MoveAsync(Guid bookingId, DateOnly startDate, DateOnly endDate, Guid byPersonId, CancellationToken cancellationToken = default);
 }
 
@@ -129,6 +131,43 @@ public class TsScheduleService : ITsScheduleService
             : _context.TsBookings.Where(b => b.Id == bookingId);
         await doomed.ExecuteDeleteAsync(cancellationToken);
         return true;
+    }
+
+    public async Task<IReadOnlyList<TsJobHoursDto>> FutureHoursAsync(CancellationToken cancellationToken = default)
+    {
+        var today = TsCalendar.Today;
+        var bookings = await _context.TsBookings.AsNoTracking()
+            .Where(b => b.EndDate >= today && !b.Person.Archived)
+            .Select(b => new { b.JobId, b.PersonId, b.StartDate, b.EndDate, b.HoursPerDay, b.OnDaysOff })
+            .ToListAsync(cancellationToken);
+        var personIds = bookings.Select(b => b.PersonId).Distinct().ToList();
+        var people = await _context.TsPeople.AsNoTracking()
+            .Include(p => p.CapacityChanges.Where(c => c.Date >= today))
+            .Where(p => personIds.Contains(p.Id))
+            .ToDictionaryAsync(p => p.Id, cancellationToken);
+
+        return bookings
+            .GroupBy(b => b.JobId)
+            .Select(g => new TsJobHoursDto(g.Key, g.Sum(b =>
+                TsCalendar.Days(b.StartDate > today ? b.StartDate : today, b.EndDate)
+                    .Count(d => b.OnDaysOff || TsCalendar.Capacity(people[b.PersonId], d) > 0) * b.HoursPerDay)))
+            .ToList();
+    }
+
+    public async Task<int> ShiftJobAsync(Guid jobId, int days, Guid byPersonId, CancellationToken cancellationToken = default)
+    {
+        if (days == 0 || Math.Abs(days) > MaxDays) throw new TsValidationException("Shift by 1 to 731 days");
+        var today = TsCalendar.Today;
+        var bookings = await _context.TsBookings.Where(b => b.JobId == jobId && b.EndDate >= today).ToListAsync(cancellationToken);
+        foreach (var booking in bookings)
+        {
+            booking.StartDate = booking.StartDate.AddDays(days);
+            booking.EndDate = booking.EndDate.AddDays(days);
+            booking.UpdatedById = byPersonId;
+            booking.UpdatedAt = DateTime.UtcNow;
+        }
+        await _context.SaveChangesAsync(cancellationToken);
+        return bookings.Count;
     }
 
     public async Task<TsBookingDto?> MoveAsync(Guid bookingId, DateOnly startDate, DateOnly endDate, Guid byPersonId, CancellationToken cancellationToken = default)
