@@ -24,7 +24,7 @@ public class TsScheduleService : ITsScheduleService
 
     private Expression<Func<TsBooking, TsBookingDto>> ToDto => b => new TsBookingDto(
         b.Id, b.PersonId, b.JobId, b.Job.Code, b.Job.Title, b.Job.Client.Name, b.Job.IsLeave,
-        b.TaskId, b.StartDate, b.EndDate, b.HoursPerDay, b.Note,
+        b.TaskId, b.StartDate, b.EndDate, b.HoursPerDay, b.OnDaysOff, b.Note,
         b.RepeatSetId == null ? 1 : _context.TsBookings.Count(x => x.RepeatSetId == b.RepeatSetId && x.StartDate >= b.StartDate),
         b.UpdatedAt,
         b.UpdatedBy == null ? null : (b.UpdatedBy.FirstName + " " + b.UpdatedBy.LastName).Trim());
@@ -61,7 +61,7 @@ public class TsScheduleService : ITsScheduleService
             var dayRows = days.Select(d =>
             {
                 var capacity = TsCalendar.Capacity(p, d);
-                var covering = capacity > 0 ? mine.Where(b => b.StartDate <= d && b.EndDate >= d).ToList() : [];
+                var covering = mine.Where(b => b.StartDate <= d && b.EndDate >= d && (capacity > 0 || b.OnDaysOff)).ToList();
                 return new TsScheduleDayDto(d, capacity, covering.Where(b => !b.IsLeave).Sum(b => b.HoursPerDay), covering.Where(b => b.IsLeave).Sum(b => b.HoursPerDay));
             }).ToList();
             var weekRows = dayRows.Chunk(7).Select(week =>
@@ -81,7 +81,7 @@ public class TsScheduleService : ITsScheduleService
             .GroupBy(b => new { b.JobId, b.JobCode, b.JobTitle, b.ClientName, b.IsLeave })
             .Select(g => new TsScheduleJobDto(g.Key.JobId, g.Key.JobCode, g.Key.JobTitle, g.Key.ClientName, g.Key.IsLeave,
                 days.Chunk(7).Select(week => g.Sum(b => week.Count(d =>
-                    b.StartDate <= d && b.EndDate >= d && TsCalendar.Capacity(byPerson[b.PersonId], d) > 0) * b.HoursPerDay)).ToList()))
+                    b.StartDate <= d && b.EndDate >= d && (b.OnDaysOff || TsCalendar.Capacity(byPerson[b.PersonId], d) > 0)) * b.HoursPerDay)).ToList()))
             .OrderBy(j => j.ClientName).ThenBy(j => j.JobCode)
             .ToList();
 
@@ -164,6 +164,7 @@ public class TsScheduleService : ITsScheduleService
                 StartDate = booking.StartDate.AddDays(7 * week),
                 EndDate = booking.EndDate.AddDays(7 * week),
                 HoursPerDay = booking.HoursPerDay,
+                OnDaysOff = booking.OnDaysOff,
                 Note = booking.Note,
                 RepeatSetId = booking.RepeatSetId,
                 UpdatedById = booking.UpdatedById,
@@ -197,6 +198,7 @@ public class TsScheduleService : ITsScheduleService
         booking.EndDate = data.EndDate;
         booking.HoursPerDay = data.HoursPerDay;
         booking.Note = note;
+        booking.OnDaysOff = data.OnDaysOff;
         booking.UpdatedById = byPersonId;
         booking.UpdatedAt = DateTime.UtcNow;
     }

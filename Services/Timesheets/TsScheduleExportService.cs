@@ -48,7 +48,7 @@ public class TsScheduleExportService : ITsScheduleExportService
     private sealed record Bucket(string Label, DateOnly From, DateOnly To);
 
     private sealed record Booking(Guid PersonId, bool IsLeave, string Client, string Title, string Code, string Task,
-        DateOnly StartDate, DateOnly EndDate, decimal HoursPerDay);
+        DateOnly StartDate, DateOnly EndDate, decimal HoursPerDay, bool OnDaysOff);
 
     public async Task<byte[]> CsvAsync(TsScheduleExportRequest request, CancellationToken cancellationToken = default)
     {
@@ -64,7 +64,7 @@ public class TsScheduleExportService : ITsScheduleExportService
         var bookings = (await _context.TsBookings.AsNoTracking()
             .Where(b => b.StartDate <= request.To && b.EndDate >= request.From)
             .Select(b => new Booking(b.PersonId, b.Job.IsLeave, b.Job.Client.Name, b.Job.Title, b.Job.Code,
-                b.Task == null ? "" : b.Task.Name, b.StartDate, b.EndDate, b.HoursPerDay))
+                b.Task == null ? "" : b.Task.Name, b.StartDate, b.EndDate, b.HoursPerDay, b.OnDaysOff))
             .ToListAsync(cancellationToken))
             .Where(b => byPerson.ContainsKey(b.PersonId))
             .ToList();
@@ -74,7 +74,7 @@ public class TsScheduleExportService : ITsScheduleExportService
         {
             var from = b.StartDate > bucket.From ? b.StartDate : bucket.From;
             var to = b.EndDate < bucket.To ? b.EndDate : bucket.To;
-            return TsCalendar.Days(from, to).Count(d => TsCalendar.Capacity(byPerson[b.PersonId], d) > 0) * b.HoursPerDay;
+            return TsCalendar.Days(from, to).Count(d => b.OnDaysOff || TsCalendar.Capacity(byPerson[b.PersonId], d) > 0) * b.HoursPerDay;
         }
 
         var lines = request.Kind == TsScheduleExportKind.Team

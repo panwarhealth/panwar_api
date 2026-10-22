@@ -9,6 +9,7 @@ public class TsBooking
     public DateOnly StartDate { get; set; }
     public DateOnly EndDate { get; set; }
     public decimal HoursPerDay { get; set; }
+    public bool OnDaysOff { get; set; }
     public string? Note { get; set; }
     public Guid? RepeatSetId { get; set; }
     public long? ForecastId { get; set; }

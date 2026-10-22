@@ -193,6 +193,7 @@ public class TsImportService : ITsImportService
             booking.StartDate = a.StartDate;
             booking.EndDate = a.EndDate;
             booking.TaskId = a.HarvestProjectTaskId is { } taskAssignment ? taskIds.GetValueOrDefault(taskAssignment) : null;
+            booking.OnDaysOff = a.ActiveOnDaysOff;
             booking.HoursPerDay = a.Allocation is { } seconds ? Math.Round(seconds / 3600m, 4) : fullDay[a.PersonId!.Value];
             booking.Note = string.IsNullOrWhiteSpace(a.Notes) ? null : a.Notes.Trim();
             booking.RepeatSetId = a.RepeatedAssignmentSetId is { } set ? new Guid(0, 0, 0, BitConverter.GetBytes(set)) : null;
@@ -488,6 +489,7 @@ public class TsImportService : ITsImportService
         public long? HarvestProjectTaskId { get; set; }
         public string? Notes { get; set; }
         public long? RepeatedAssignmentSetId { get; set; }
+        public bool ActiveOnDaysOff { get; set; }
         public long? UpdatedById { get; set; }
         public DateTime UpdatedAt { get; set; }
     }

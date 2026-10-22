@@ -199,6 +199,7 @@ public sealed record TsBookingDto(
     DateOnly StartDate,
     DateOnly EndDate,
     decimal HoursPerDay,
+    bool OnDaysOff,
     string? Note,
     int RepeatWeeks,
     DateTime UpdatedAt,
@@ -220,6 +221,7 @@ public class TsBookingWriteRequest
     public DateOnly StartDate { get; set; }
     public DateOnly EndDate { get; set; }
     public decimal HoursPerDay { get; set; }
+    public bool OnDaysOff { get; set; }
     public string? Note { get; set; }
     public int RepeatWeeks { get; set; } = 1;
 }
