@@ -10,6 +10,7 @@ public interface ITsTimeService
 {
     Task<TsTimeDto> GetAsync(TsViewer viewer, Guid personId, DateOnly from, DateOnly to, CancellationToken cancellationToken = default);
     Task<IReadOnlyList<TsPickJobDto>> PickableJobsAsync(TsViewer viewer, Guid personId, CancellationToken cancellationToken = default);
+    Task<IReadOnlyList<TsNamedDto>> TeammatesAsync(TsViewer viewer, CancellationToken cancellationToken = default);
     Task<TsEntryDto> CreateAsync(TsViewer viewer, TsEntryWriteRequest data, CancellationToken cancellationToken = default);
     Task<TsEntryDto?> UpdateAsync(TsViewer viewer, Guid entryId, TsEntryWriteRequest data, CancellationToken cancellationToken = default);
     Task<bool> DeleteAsync(TsViewer viewer, Guid entryId, CancellationToken cancellationToken = default);
@@ -57,6 +58,12 @@ public class TsTimeService : ITsTimeService
 
         return new TsTimeDto(entries, stars);
     }
+
+    public async Task<IReadOnlyList<TsNamedDto>> TeammatesAsync(TsViewer viewer, CancellationToken cancellationToken = default)
+        => await _access.VisiblePeople(viewer, _context.TsPeople.AsNoTracking().Where(p => !p.Archived && !p.IsPlaceholder))
+            .OrderBy(p => p.FirstName).ThenBy(p => p.LastName)
+            .Select(p => new TsNamedDto(p.Id, (p.FirstName + " " + p.LastName).Trim()))
+            .ToListAsync(cancellationToken);
 
     public async Task<IReadOnlyList<TsPickJobDto>> PickableJobsAsync(TsViewer viewer, Guid personId, CancellationToken cancellationToken = default)
     {

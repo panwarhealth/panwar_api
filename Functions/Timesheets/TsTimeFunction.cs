@@ -30,6 +30,12 @@ public class TsTimeFunction
             await TsHttp.Ok(req, await _time.GetAsync(viewer, TsHttp.Id(req, "personId") ?? viewer.PersonId,
                 TsHttp.RequiredDate(req, "from"), TsHttp.RequiredDate(req, "to"), ct)));
 
+    [Function("TsTeammates")]
+    public Task<HttpResponseData> Teammates(
+        [HttpTrigger(AuthorizationLevel.Anonymous, "get", Route = "ts/teammates")] HttpRequestData req, FunctionContext context)
+        => TsHttp.Handle(req, context, _viewers, TsLevel.Member, async (viewer, ct) =>
+            await TsHttp.Ok(req, new { people = await _time.TeammatesAsync(viewer, ct) }));
+
     [Function("TsPickableJobs")]
     public Task<HttpResponseData> PickableJobs(
         [HttpTrigger(AuthorizationLevel.Anonymous, "get", Route = "ts/pickable-jobs")] HttpRequestData req, FunctionContext context)
