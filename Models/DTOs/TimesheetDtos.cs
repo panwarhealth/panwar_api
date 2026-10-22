@@ -271,6 +271,22 @@ public sealed record TsReportOptionsDto(
     IReadOnlyList<TsReportOptionDto> People,
     IReadOnlyList<string> Roles);
 
+public sealed record TsActivityDto(
+    DateTime At,
+    string Kind,
+    DateOnly Date,
+    string ClientName,
+    string JobCode,
+    string JobTitle,
+    string? FromJob,
+    string TaskName,
+    decimal? HoursBefore,
+    decimal Hours,
+    string PersonName,
+    string PerformedByName);
+
+public sealed record TsActivityListDto(int Count, IReadOnlyList<TsActivityDto> Rows);
+
 public class TsMoveEntriesRequest
 {
     public List<Guid> EntryIds { get; set; } = [];

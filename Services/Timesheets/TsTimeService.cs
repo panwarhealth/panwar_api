@@ -92,7 +92,7 @@ public class TsTimeService : ITsTimeService
         if (data.StartTimer)
         {
             if (data.Hours < 0 || data.Hours > MaxHours) throw new TsValidationException("Hours must be between 0 and 24");
-            await StopRunningAsync(personId, cancellationToken);
+            await StopRunningAsync(personId, viewer.PersonId, cancellationToken);
         }
         else
         {
@@ -114,6 +114,8 @@ public class TsTimeService : ITsTimeService
             UpdatedAt = DateTime.UtcNow
         };
         _context.TsEntries.Add(entry);
+        _context.TsActivities.Add(TsActivityService.For(TsActivityKind.Created, entry, viewer.PersonId));
+        if (data.StartTimer) _context.TsActivities.Add(TsActivityService.For(TsActivityKind.TimerStarted, entry, viewer.PersonId));
         await _context.SaveChangesAsync(cancellationToken);
         await _alerts.CheckAsync([entry.JobId], cancellationToken);
         return await GetDtoAsync(entry.Id, cancellationToken);
@@ -136,12 +138,18 @@ public class TsTimeService : ITsTimeService
         }
 
         var previousJob = entry.JobId;
+        var previousHours = entry.Hours;
+        var changed = entry.JobId != data.JobId || entry.TaskId != data.TaskId || entry.Date != data.Date
+            || entry.Hours != data.Hours || entry.Notes != notes;
         entry.JobId = data.JobId;
         entry.TaskId = data.TaskId;
         entry.Date = data.Date;
         entry.Hours = data.Hours;
         entry.Notes = notes;
         entry.UpdatedAt = DateTime.UtcNow;
+        if (changed)
+            _context.TsActivities.Add(TsActivityService.For(TsActivityKind.Edited, entry, viewer.PersonId,
+                previousHours, previousJob != entry.JobId ? previousJob : null));
         await _context.SaveChangesAsync(cancellationToken);
         await _alerts.CheckAsync([previousJob, entry.JobId], cancellationToken);
         return await GetDtoAsync(entry.Id, cancellationToken);
@@ -163,9 +171,12 @@ public class TsTimeService : ITsTimeService
 
         foreach (var entry in entries)
         {
+            var fromJob = entry.JobId;
             entry.JobId = jobId;
             entry.TaskId = taskId;
             entry.UpdatedAt = DateTime.UtcNow;
+            _context.TsActivities.Add(TsActivityService.For(TsActivityKind.Edited, entry, viewer.PersonId,
+                entry.Hours, fromJob != jobId ? fromJob : null));
         }
         await _context.SaveChangesAsync(cancellationToken);
         await _alerts.CheckAsync([.. previousJobs, jobId], cancellationToken);
@@ -178,6 +189,7 @@ public class TsTimeService : ITsTimeService
         if (entry is null) return false;
 
         await RequireCanWriteAsync(viewer, entry.PersonId, entry.JobId, cancellationToken);
+        _context.TsActivities.Add(TsActivityService.For(TsActivityKind.Deleted, entry, viewer.PersonId));
         _context.TsEntries.Remove(entry);
         await _context.SaveChangesAsync(cancellationToken);
         await _alerts.CheckAsync([entry.JobId], cancellationToken);
@@ -191,7 +203,7 @@ public class TsTimeService : ITsTimeService
         if (entry.PersonId != viewer.PersonId) throw new TsForbiddenException();
         await RequireLoggableAsync(entry.PersonId, entry.JobId, entry.TaskId, cancellationToken);
 
-        await StopRunningAsync(entry.PersonId, cancellationToken);
+        await StopRunningAsync(entry.PersonId, viewer.PersonId, cancellationToken);
         var today = TsCalendar.Today;
         if (entry.Date != today)
         {
@@ -206,9 +218,11 @@ public class TsTimeService : ITsTimeService
                 CreatedAt = DateTime.UtcNow
             };
             _context.TsEntries.Add(entry);
+            _context.TsActivities.Add(TsActivityService.For(TsActivityKind.Created, entry, viewer.PersonId));
         }
         entry.TimerStartedAt = DateTime.UtcNow;
         entry.UpdatedAt = DateTime.UtcNow;
+        _context.TsActivities.Add(TsActivityService.For(TsActivityKind.TimerStarted, entry, viewer.PersonId));
         await _context.SaveChangesAsync(cancellationToken);
         return await GetDtoAsync(entry.Id, cancellationToken);
     }
@@ -224,6 +238,7 @@ public class TsTimeService : ITsTimeService
         ValidateNotes(trimmed);
         entry.Notes = trimmed;
         Stop(entry);
+        _context.TsActivities.Add(TsActivityService.For(TsActivityKind.TimerStopped, entry, viewer.PersonId));
         await _context.SaveChangesAsync(cancellationToken);
         await _alerts.CheckAsync([entry.JobId], cancellationToken);
         return await GetDtoAsync(entry.Id, cancellationToken);
@@ -254,6 +269,8 @@ public class TsTimeService : ITsTimeService
             .ToListAsync(cancellationToken);
         if (entries.Count > 0) await RequireCanWriteAsync(viewer, viewer.PersonId, jobId, cancellationToken);
 
+        foreach (var entry in entries)
+            _context.TsActivities.Add(TsActivityService.For(TsActivityKind.Deleted, entry, viewer.PersonId));
         _context.TsEntries.RemoveRange(entries);
         _context.TsStars.RemoveRange(_context.TsStars.Where(s => s.PersonId == viewer.PersonId && s.JobId == jobId && s.TaskId == taskId));
         await _context.SaveChangesAsync(cancellationToken);
@@ -276,14 +293,18 @@ public class TsTimeService : ITsTimeService
         if (!await _access.CanWriteAsync(viewer, personId, jobId, cancellationToken)) throw new TsForbiddenException();
     }
 
-    private async Task StopRunningAsync(Guid personId, CancellationToken cancellationToken)
+    private async Task StopRunningAsync(Guid personId, Guid performedById, CancellationToken cancellationToken)
     {
         var running = await _context.TsEntries
             .Where(e => e.PersonId == personId && e.TimerStartedAt != null)
             .ToListAsync(cancellationToken);
         if (running.Any(e => e.Notes.Length == 0))
             throw new TsValidationException("Add a note to your running timer and stop it first");
-        foreach (var entry in running) Stop(entry);
+        foreach (var entry in running)
+        {
+            Stop(entry);
+            _context.TsActivities.Add(TsActivityService.For(TsActivityKind.TimerStopped, entry, performedById));
+        }
     }
 
     private static void Stop(TsEntry entry)

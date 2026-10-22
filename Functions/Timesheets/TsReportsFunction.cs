@@ -1,6 +1,7 @@
 using System.Net;
 using Microsoft.Azure.Functions.Worker;
 using Microsoft.Azure.Functions.Worker.Http;
+using Panwar.Api.Models;
 using Panwar.Api.Models.DTOs;
 using Panwar.Api.Models.Enums;
 using Panwar.Api.Services.Timesheets;
@@ -14,10 +15,12 @@ public class TsReportsFunction
     private readonly ITsViewerService _viewers;
     private readonly ITsReportService _reports;
     private readonly ITsReportExporter _exporter;
+    private readonly ITsActivityService _activity;
     private readonly ITsSavedReportService _saved;
 
-    public TsReportsFunction(ITsViewerService viewers, ITsReportService reports, ITsReportExporter exporter, ITsSavedReportService saved)
+    public TsReportsFunction(ITsViewerService viewers, ITsReportService reports, ITsReportExporter exporter, ITsSavedReportService saved, ITsActivityService activity)
     {
+        _activity = activity;
         _viewers = viewers;
         _reports = reports;
         _exporter = exporter;
@@ -35,6 +38,22 @@ public class TsReportsFunction
         [HttpTrigger(AuthorizationLevel.Anonymous, "get", Route = "ts/reports/detailed")] HttpRequestData req, FunctionContext context)
         => TsHttp.Handle(req, context, _viewers, TsLevel.Member, async (viewer, ct) =>
             await TsHttp.Ok(req, await _reports.DetailedAsync(viewer, Filter(req), TsHttp.Enum(req, "groupBy", TsDetailedGroupBy.Date), ct)));
+
+    [Function("TsActivityLog")]
+    public Task<HttpResponseData> Activity(
+        [HttpTrigger(AuthorizationLevel.Anonymous, "get", Route = "ts/reports/activity")] HttpRequestData req, FunctionContext context)
+        => TsHttp.Handle(req, context, _viewers, TsLevel.Member, async (viewer, ct) =>
+        {
+            var kinds = (req.Query["kinds"] ?? "")
+                .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                .Select(k => Enum.TryParse<TsActivityKind>(k, true, out var kind) ? kind : throw new TsValidationException("kinds isn't valid"))
+                .ToList();
+            var filter = new TsActivityFilter(
+                TsHttp.Date(req, "from"), TsHttp.Date(req, "to"),
+                TsHttp.Ids(req, "clientIds"), TsHttp.Ids(req, "jobIds"), TsHttp.Ids(req, "taskIds"),
+                TsHttp.Ids(req, "personIds"), TsHttp.Ids(req, "performedByIds"), kinds);
+            return await TsHttp.Ok(req, await _activity.ListAsync(viewer, filter, ct));
+        });
 
     [Function("TsReportOptions")]
     public Task<HttpResponseData> Options(

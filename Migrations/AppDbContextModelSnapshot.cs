@@ -1854,6 +1854,66 @@ namespace Panwar.Api.Migrations
                     b.ToTable("tracked_link", "panwar_portals");
                 });
 
+            modelBuilder.Entity("Panwar.Api.Models.TsActivity", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("At")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateOnly>("Date")
+                        .HasColumnType("date");
+
+                    b.Property<Guid>("EntryId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid?>("FromJobId")
+                        .HasColumnType("uuid");
+
+                    b.Property<decimal>("Hours")
+                        .HasPrecision(6, 2)
+                        .HasColumnType("numeric(6,2)");
+
+                    b.Property<decimal?>("HoursBefore")
+                        .HasPrecision(6, 2)
+                        .HasColumnType("numeric(6,2)");
+
+                    b.Property<Guid>("JobId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Kind")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<Guid>("PerformedById")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("PersonId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("TaskId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("At");
+
+                    b.HasIndex("FromJobId");
+
+                    b.HasIndex("JobId");
+
+                    b.HasIndex("PerformedById");
+
+                    b.HasIndex("PersonId");
+
+                    b.HasIndex("TaskId");
+
+                    b.ToTable("ts_activity", "panwar_portals");
+                });
+
             modelBuilder.Entity("Panwar.Api.Models.TsBooking", b =>
                 {
                     b.Property<Guid>("Id")
@@ -3031,6 +3091,48 @@ namespace Panwar.Api.Migrations
                         .IsRequired();
 
                     b.Navigation("Creator");
+                });
+
+            modelBuilder.Entity("Panwar.Api.Models.TsActivity", b =>
+                {
+                    b.HasOne("Panwar.Api.Models.TsJob", "FromJob")
+                        .WithMany()
+                        .HasForeignKey("FromJobId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.HasOne("Panwar.Api.Models.TsJob", "Job")
+                        .WithMany()
+                        .HasForeignKey("JobId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("Panwar.Api.Models.TsPerson", "PerformedBy")
+                        .WithMany()
+                        .HasForeignKey("PerformedById")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("Panwar.Api.Models.TsPerson", "Person")
+                        .WithMany()
+                        .HasForeignKey("PersonId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("Panwar.Api.Models.TsTask", "Task")
+                        .WithMany()
+                        .HasForeignKey("TaskId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("FromJob");
+
+                    b.Navigation("Job");
+
+                    b.Navigation("PerformedBy");
+
+                    b.Navigation("Person");
+
+                    b.Navigation("Task");
                 });
 
             modelBuilder.Entity("Panwar.Api.Models.TsBooking", b =>

@@ -58,6 +58,7 @@ public class AppDbContext : DbContext
     public DbSet<TsTask> TsTasks { get; set; } = null!;
     public DbSet<TsJob> TsJobs { get; set; } = null!;
     public DbSet<TsColorLabel> TsColorLabels { get; set; } = null!;
+    public DbSet<TsActivity> TsActivities { get; set; } = null!;
     public DbSet<TsJobTask> TsJobTasks { get; set; } = null!;
     public DbSet<TsJobPerson> TsJobPeople { get; set; } = null!;
     public DbSet<TsPerson> TsPeople { get; set; } = null!;
@@ -135,6 +136,21 @@ public class AppDbContext : DbContext
             entity.Property(e => e.CreatedAt).HasDefaultValueSql("CURRENT_TIMESTAMP");
             entity.Property(e => e.UpdatedAt).HasDefaultValueSql("CURRENT_TIMESTAMP");
             entity.HasIndex(e => e.HarvestId).IsUnique();
+        });
+
+        modelBuilder.Entity<TsActivity>(entity =>
+        {
+            entity.ToTable("ts_activity");
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Kind).HasConversion<string>().HasMaxLength(20);
+            entity.Property(e => e.Hours).HasPrecision(6, 2);
+            entity.Property(e => e.HoursBefore).HasPrecision(6, 2);
+            entity.HasOne(e => e.Person).WithMany().HasForeignKey(e => e.PersonId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(e => e.PerformedBy).WithMany().HasForeignKey(e => e.PerformedById).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(e => e.Job).WithMany().HasForeignKey(e => e.JobId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(e => e.FromJob).WithMany().HasForeignKey(e => e.FromJobId).OnDelete(DeleteBehavior.SetNull);
+            entity.HasOne(e => e.Task).WithMany().HasForeignKey(e => e.TaskId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasIndex(e => e.At);
         });
 
         modelBuilder.Entity<TsColorLabel>(entity =>
