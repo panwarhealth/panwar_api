@@ -9,7 +9,7 @@ namespace Panwar.Api.Functions.Timesheets;
 
 public class TsScheduleFunction
 {
-    private const int MaxWeeks = 12;
+    private const int MaxWeeks = 26;
 
     private readonly ITsViewerService _viewers;
     private readonly ITsScheduleService _schedule;
