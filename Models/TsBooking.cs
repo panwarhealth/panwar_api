@@ -10,11 +10,14 @@ public class TsBooking
     public DateOnly EndDate { get; set; }
     public decimal HoursPerDay { get; set; }
     public string? Note { get; set; }
+    public Guid? RepeatSetId { get; set; }
     public long? ForecastId { get; set; }
+    public Guid? UpdatedById { get; set; }
     public DateTime CreatedAt { get; set; }
     public DateTime UpdatedAt { get; set; }
 
     public TsPerson Person { get; set; } = null!;
     public TsJob Job { get; set; } = null!;
     public TsTask? Task { get; set; }
+    public TsPerson? UpdatedBy { get; set; }
 }

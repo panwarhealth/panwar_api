@@ -1885,6 +1885,9 @@ namespace Panwar.Api.Migrations
                     b.Property<Guid>("PersonId")
                         .HasColumnType("uuid");
 
+                    b.Property<Guid?>("RepeatSetId")
+                        .HasColumnType("uuid");
+
                     b.Property<DateOnly>("StartDate")
                         .HasColumnType("date");
 
@@ -1896,6 +1899,9 @@ namespace Panwar.Api.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasDefaultValueSql("CURRENT_TIMESTAMP");
 
+                    b.Property<Guid?>("UpdatedById")
+                        .HasColumnType("uuid");
+
                     b.HasKey("Id");
 
                     b.HasIndex("ForecastId")
@@ -1905,7 +1911,11 @@ namespace Panwar.Api.Migrations
 
                     b.HasIndex("PersonId");
 
+                    b.HasIndex("RepeatSetId");
+
                     b.HasIndex("TaskId");
+
+                    b.HasIndex("UpdatedById");
 
                     b.HasIndex("StartDate", "EndDate");
 
@@ -2953,11 +2963,18 @@ namespace Panwar.Api.Migrations
                         .HasForeignKey("TaskId")
                         .OnDelete(DeleteBehavior.SetNull);
 
+                    b.HasOne("Panwar.Api.Models.TsPerson", "UpdatedBy")
+                        .WithMany()
+                        .HasForeignKey("UpdatedById")
+                        .OnDelete(DeleteBehavior.SetNull);
+
                     b.Navigation("Job");
 
                     b.Navigation("Person");
 
                     b.Navigation("Task");
+
+                    b.Navigation("UpdatedBy");
                 });
 
             modelBuilder.Entity("Panwar.Api.Models.TsCapacityChange", b =>

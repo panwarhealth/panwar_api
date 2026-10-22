@@ -230,7 +230,9 @@ public class AppDbContext : DbContext
             entity.HasOne(e => e.Person).WithMany().HasForeignKey(e => e.PersonId).OnDelete(DeleteBehavior.Cascade);
             entity.HasOne(e => e.Job).WithMany().HasForeignKey(e => e.JobId).OnDelete(DeleteBehavior.Cascade);
             entity.HasOne(e => e.Task).WithMany().HasForeignKey(e => e.TaskId).OnDelete(DeleteBehavior.SetNull);
+            entity.HasOne(e => e.UpdatedBy).WithMany().HasForeignKey(e => e.UpdatedById).OnDelete(DeleteBehavior.SetNull);
             entity.HasIndex(e => new { e.StartDate, e.EndDate });
+            entity.HasIndex(e => e.RepeatSetId);
             entity.HasIndex(e => e.ForecastId).IsUnique();
         });
 

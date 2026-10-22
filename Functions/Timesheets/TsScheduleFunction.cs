@@ -49,18 +49,18 @@ public class TsScheduleFunction
     [Function("TsCreateBooking")]
     public Task<HttpResponseData> Create(
         [HttpTrigger(AuthorizationLevel.Anonymous, "post", Route = "ts/bookings")] HttpRequestData req, FunctionContext context)
-        => TsHttp.Handle(req, context, _viewers, TsLevel.Manager, async (_, ct) =>
-            await TsHttp.Ok(req, await _schedule.CreateAsync(await TsHttp.Body<TsBookingWriteRequest>(req), ct), HttpStatusCode.Created));
+        => TsHttp.Handle(req, context, _viewers, TsLevel.Manager, async (viewer, ct) =>
+            await TsHttp.Ok(req, await _schedule.CreateAsync(await TsHttp.Body<TsBookingWriteRequest>(req), viewer.PersonId, ct), HttpStatusCode.Created));
 
     [Function("TsUpdateBooking")]
     public Task<HttpResponseData> Update(
         [HttpTrigger(AuthorizationLevel.Anonymous, "put", Route = "ts/bookings/{bookingId:guid}")] HttpRequestData req, FunctionContext context, Guid bookingId)
-        => TsHttp.Handle(req, context, _viewers, TsLevel.Manager, async (_, ct) =>
-            await TsHttp.OkOrNotFound(req, await _schedule.UpdateAsync(bookingId, await TsHttp.Body<TsBookingWriteRequest>(req), ct)));
+        => TsHttp.Handle(req, context, _viewers, TsLevel.Manager, async (viewer, ct) =>
+            await TsHttp.OkOrNotFound(req, await _schedule.UpdateAsync(bookingId, await TsHttp.Body<TsBookingWriteRequest>(req), viewer.PersonId, ct)));
 
     [Function("TsDeleteBooking")]
     public Task<HttpResponseData> Delete(
         [HttpTrigger(AuthorizationLevel.Anonymous, "delete", Route = "ts/bookings/{bookingId:guid}")] HttpRequestData req, FunctionContext context, Guid bookingId)
         => TsHttp.Handle(req, context, _viewers, TsLevel.Manager, async (_, ct) =>
-            await TsHttp.NoContentOrNotFound(req, await _schedule.DeleteAsync(bookingId, ct)));
+            await TsHttp.NoContentOrNotFound(req, await _schedule.DeleteAsync(bookingId, TsHttp.Flag(req, "following"), ct)));
 }

@@ -195,7 +195,9 @@ public class TsImportService : ITsImportService
             booking.TaskId = a.HarvestProjectTaskId is { } taskAssignment ? taskIds.GetValueOrDefault(taskAssignment) : null;
             booking.HoursPerDay = a.Allocation is { } seconds ? Math.Round(seconds / 3600m, 4) : fullDay[a.PersonId!.Value];
             booking.Note = string.IsNullOrWhiteSpace(a.Notes) ? null : a.Notes.Trim();
-            booking.UpdatedAt = DateTime.UtcNow;
+            booking.RepeatSetId = a.RepeatedAssignmentSetId is { } set ? new Guid(0, 0, 0, BitConverter.GetBytes(set)) : null;
+            booking.UpdatedById = a.UpdatedById is { } by && personIds.TryGetValue(by, out var updater) ? updater : null;
+            booking.UpdatedAt = a.UpdatedAt;
         }
         await _context.SaveChangesAsync(cancellationToken);
 
@@ -485,5 +487,8 @@ public class TsImportService : ITsImportService
         public int? Allocation { get; set; }
         public long? HarvestProjectTaskId { get; set; }
         public string? Notes { get; set; }
+        public long? RepeatedAssignmentSetId { get; set; }
+        public long? UpdatedById { get; set; }
+        public DateTime UpdatedAt { get; set; }
     }
 }

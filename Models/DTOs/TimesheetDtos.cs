@@ -199,7 +199,10 @@ public sealed record TsBookingDto(
     DateOnly StartDate,
     DateOnly EndDate,
     decimal HoursPerDay,
-    string? Note);
+    string? Note,
+    int RepeatWeeks,
+    DateTime UpdatedAt,
+    string? UpdatedByName);
 
 public sealed record TsScheduleDto(IReadOnlyList<TsSchedulePersonDto> People, IReadOnlyList<TsScheduleJobDto> Jobs, IReadOnlyList<TsBookingDto> Bookings);
 
@@ -212,6 +215,7 @@ public class TsBookingWriteRequest
     public DateOnly EndDate { get; set; }
     public decimal HoursPerDay { get; set; }
     public string? Note { get; set; }
+    public int RepeatWeeks { get; set; } = 1;
 }
 
 public sealed record TsSummaryRowDto(Guid Id, string Name, decimal Hours);

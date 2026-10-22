@@ -9,9 +9,9 @@ namespace Panwar.Api.Services.Timesheets;
 public interface ITsScheduleService
 {
     Task<TsScheduleDto> GetAsync(DateOnly weekStart, int weeks, CancellationToken cancellationToken = default);
-    Task<TsBookingDto> CreateAsync(TsBookingWriteRequest data, CancellationToken cancellationToken = default);
-    Task<TsBookingDto?> UpdateAsync(Guid bookingId, TsBookingWriteRequest data, CancellationToken cancellationToken = default);
-    Task<bool> DeleteAsync(Guid bookingId, CancellationToken cancellationToken = default);
+    Task<TsBookingDto> CreateAsync(TsBookingWriteRequest data, Guid byPersonId, CancellationToken cancellationToken = default);
+    Task<TsBookingDto?> UpdateAsync(Guid bookingId, TsBookingWriteRequest data, Guid byPersonId, CancellationToken cancellationToken = default);
+    Task<bool> DeleteAsync(Guid bookingId, bool following, CancellationToken cancellationToken = default);
 }
 
 public class TsScheduleService : ITsScheduleService
@@ -19,10 +19,14 @@ public class TsScheduleService : ITsScheduleService
     private const decimal MaxHoursPerDay = 24;
     private const int MaxDays = 731;
     private const int MaxNote = 500;
+    private const int MaxRepeatWeeks = 104;
 
-    private static readonly Expression<Func<TsBooking, TsBookingDto>> ToDto = b => new TsBookingDto(
+    private Expression<Func<TsBooking, TsBookingDto>> ToDto => b => new TsBookingDto(
         b.Id, b.PersonId, b.JobId, b.Job.Code, b.Job.Title, b.Job.Client.Name, b.Job.IsLeave,
-        b.TaskId, b.StartDate, b.EndDate, b.HoursPerDay, b.Note);
+        b.TaskId, b.StartDate, b.EndDate, b.HoursPerDay, b.Note,
+        b.RepeatSetId == null ? 1 : _context.TsBookings.Count(x => x.RepeatSetId == b.RepeatSetId && x.StartDate >= b.StartDate),
+        b.UpdatedAt,
+        b.UpdatedBy == null ? null : (b.UpdatedBy.FirstName + " " + b.UpdatedBy.LastName).Trim());
 
     private readonly AppDbContext _context;
 
@@ -83,29 +87,80 @@ public class TsScheduleService : ITsScheduleService
         return new TsScheduleDto(rows, jobs, bookings);
     }
 
-    public async Task<TsBookingDto> CreateAsync(TsBookingWriteRequest data, CancellationToken cancellationToken = default)
+    public async Task<TsBookingDto> CreateAsync(TsBookingWriteRequest data, Guid byPersonId, CancellationToken cancellationToken = default)
     {
         var booking = new TsBooking { Id = Guid.NewGuid(), CreatedAt = DateTime.UtcNow };
-        await ApplyAsync(booking, data, cancellationToken);
+        await ApplyAsync(booking, data, byPersonId, cancellationToken);
         _context.TsBookings.Add(booking);
+        AddRepeats(booking, data.RepeatWeeks);
         await _context.SaveChangesAsync(cancellationToken);
         return await _context.TsBookings.AsNoTracking().Where(b => b.Id == booking.Id).Select(ToDto).FirstAsync(cancellationToken);
     }
 
-    public async Task<TsBookingDto?> UpdateAsync(Guid bookingId, TsBookingWriteRequest data, CancellationToken cancellationToken = default)
+    public async Task<TsBookingDto?> UpdateAsync(Guid bookingId, TsBookingWriteRequest data, Guid byPersonId, CancellationToken cancellationToken = default)
     {
         var booking = await _context.TsBookings.FirstOrDefaultAsync(b => b.Id == bookingId, cancellationToken);
         if (booking is null) return null;
-        await ApplyAsync(booking, data, cancellationToken);
+        var (setId, start) = (booking.RepeatSetId, booking.StartDate);
+        await ApplyAsync(booking, data, byPersonId, cancellationToken);
+
+        await using var transaction = await _context.Database.BeginTransactionAsync(cancellationToken);
+        if (setId is not null)
+            await _context.TsBookings
+                .Where(b => b.RepeatSetId == setId && b.StartDate > start && b.Id != bookingId)
+                .ExecuteDeleteAsync(cancellationToken);
+        AddRepeats(booking, data.RepeatWeeks);
         await _context.SaveChangesAsync(cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
         return await _context.TsBookings.AsNoTracking().Where(b => b.Id == booking.Id).Select(ToDto).FirstAsync(cancellationToken);
     }
 
-    public async Task<bool> DeleteAsync(Guid bookingId, CancellationToken cancellationToken = default)
-        => await _context.TsBookings.Where(b => b.Id == bookingId).ExecuteDeleteAsync(cancellationToken) > 0;
-
-    private async Task ApplyAsync(TsBooking booking, TsBookingWriteRequest data, CancellationToken cancellationToken)
+    public async Task<bool> DeleteAsync(Guid bookingId, bool following, CancellationToken cancellationToken = default)
     {
+        var booking = await _context.TsBookings.AsNoTracking()
+            .Where(b => b.Id == bookingId)
+            .Select(b => new { b.RepeatSetId, b.StartDate })
+            .FirstOrDefaultAsync(cancellationToken);
+        if (booking is null) return false;
+
+        var doomed = following && booking.RepeatSetId is { } setId
+            ? _context.TsBookings.Where(b => b.RepeatSetId == setId && b.StartDate >= booking.StartDate)
+            : _context.TsBookings.Where(b => b.Id == bookingId);
+        await doomed.ExecuteDeleteAsync(cancellationToken);
+        return true;
+    }
+
+    private void AddRepeats(TsBooking booking, int weeks)
+    {
+        if (weeks <= 1)
+        {
+            booking.RepeatSetId = null;
+            return;
+        }
+        booking.RepeatSetId ??= Guid.NewGuid();
+        for (var week = 1; week < weeks; week++)
+            _context.TsBookings.Add(new TsBooking
+            {
+                Id = Guid.NewGuid(),
+                PersonId = booking.PersonId,
+                JobId = booking.JobId,
+                TaskId = booking.TaskId,
+                StartDate = booking.StartDate.AddDays(7 * week),
+                EndDate = booking.EndDate.AddDays(7 * week),
+                HoursPerDay = booking.HoursPerDay,
+                Note = booking.Note,
+                RepeatSetId = booking.RepeatSetId,
+                UpdatedById = booking.UpdatedById,
+                CreatedAt = DateTime.UtcNow,
+                UpdatedAt = booking.UpdatedAt
+            });
+    }
+
+    private async Task ApplyAsync(TsBooking booking, TsBookingWriteRequest data, Guid byPersonId, CancellationToken cancellationToken)
+    {
+        if (data.RepeatWeeks < 1 || data.RepeatWeeks > MaxRepeatWeeks) throw new TsValidationException("Repeat weekly for 1 to 104 weeks");
+        if (data.RepeatWeeks > 1 && data.EndDate.DayNumber - data.StartDate.DayNumber >= 7)
+            throw new TsValidationException("Only bookings of a week or less can repeat weekly");
         if (data.EndDate < data.StartDate) throw new TsValidationException("The end date is before the start date");
         if (data.EndDate.DayNumber - data.StartDate.DayNumber > MaxDays) throw new TsValidationException("Bookings can be up to two years long");
         if (data.HoursPerDay <= 0 || data.HoursPerDay > MaxHoursPerDay) throw new TsValidationException("Hours a day must be more than 0 and no more than 24");
@@ -126,6 +181,7 @@ public class TsScheduleService : ITsScheduleService
         booking.EndDate = data.EndDate;
         booking.HoursPerDay = data.HoursPerDay;
         booking.Note = note;
+        booking.UpdatedById = byPersonId;
         booking.UpdatedAt = DateTime.UtcNow;
     }
 }
