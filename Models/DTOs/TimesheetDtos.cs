@@ -47,7 +47,7 @@ public class TsStarRequest
     public bool Starred { get; set; }
 }
 
-public sealed record TsJobRowDto(Guid Id, string Code, string Title, Guid ClientId, string ClientName, decimal Spent, bool Archived, bool IsLeave, string? Color);
+public sealed record TsJobRowDto(Guid Id, string Code, string Title, Guid ClientId, string ClientName, decimal Spent, bool Archived, bool IsLeave, string? Color, IReadOnlyList<Guid> ManagerIds);
 
 public sealed record TsColorLabelDto(string Key, string Name);
 

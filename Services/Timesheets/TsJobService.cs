@@ -51,7 +51,8 @@ public class TsJobService : ITsJobService
                 _context.TsEntries.Where(e => e.JobId == j.Id).Sum(e => (decimal?)e.Hours) ?? 0,
                 j.Archived,
                 j.IsLeave,
-                j.Color))
+                j.Color,
+                j.People.Where(p => p.IsManager).Select(p => p.PersonId).ToList()))
             .ToListAsync(cancellationToken);
     }
 
