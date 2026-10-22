@@ -30,6 +30,15 @@ public class TsTimeFunction
             await TsHttp.Ok(req, await _time.GetAsync(viewer, TsHttp.Id(req, "personId") ?? viewer.PersonId,
                 TsHttp.RequiredDate(req, "from"), TsHttp.RequiredDate(req, "to"), ct)));
 
+    [Function("TsMoveEntries")]
+    public Task<HttpResponseData> MoveEntries(
+        [HttpTrigger(AuthorizationLevel.Anonymous, "post", Route = "ts/entries/move")] HttpRequestData req, FunctionContext context)
+        => TsHttp.Handle(req, context, _viewers, TsLevel.Member, async (viewer, ct) =>
+        {
+            var body = await TsHttp.Body<TsMoveEntriesRequest>(req);
+            return await TsHttp.Ok(req, new { moved = await _time.MoveEntriesAsync(viewer, body.EntryIds, body.JobId, body.TaskId, ct) });
+        });
+
     [Function("TsTeammates")]
     public Task<HttpResponseData> Teammates(
         [HttpTrigger(AuthorizationLevel.Anonymous, "get", Route = "ts/teammates")] HttpRequestData req, FunctionContext context)

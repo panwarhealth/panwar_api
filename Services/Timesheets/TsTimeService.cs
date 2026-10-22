@@ -17,6 +17,7 @@ public interface ITsTimeService
     Task<TsEntryDto?> StartAsync(TsViewer viewer, Guid entryId, CancellationToken cancellationToken = default);
     Task<TsEntryDto?> StopAsync(TsViewer viewer, Guid entryId, string notes, CancellationToken cancellationToken = default);
     Task SetStarAsync(TsViewer viewer, TsStarRequest data, CancellationToken cancellationToken = default);
+    Task<int> MoveEntriesAsync(TsViewer viewer, IReadOnlyCollection<Guid> entryIds, Guid jobId, Guid taskId, CancellationToken cancellationToken = default);
     Task DeleteRowAsync(TsViewer viewer, DateOnly weekStart, Guid jobId, Guid taskId, CancellationToken cancellationToken = default);
 }
 
@@ -144,6 +145,31 @@ public class TsTimeService : ITsTimeService
         await _context.SaveChangesAsync(cancellationToken);
         await _alerts.CheckAsync([previousJob, entry.JobId], cancellationToken);
         return await GetDtoAsync(entry.Id, cancellationToken);
+    }
+
+    public async Task<int> MoveEntriesAsync(TsViewer viewer, IReadOnlyCollection<Guid> entryIds, Guid jobId, Guid taskId, CancellationToken cancellationToken = default)
+    {
+        var ids = entryIds.Distinct().ToList();
+        if (ids.Count == 0) throw new TsValidationException("Tick the time to move");
+        var entries = await _context.TsEntries.Where(e => ids.Contains(e.Id)).ToListAsync(cancellationToken);
+        var previousJobs = entries.Select(e => e.JobId).Distinct().ToList();
+        foreach (var entry in entries)
+        {
+            await RequireCanWriteAsync(viewer, entry.PersonId, entry.JobId, cancellationToken);
+            await RequireCanWriteAsync(viewer, entry.PersonId, jobId, cancellationToken);
+        }
+        foreach (var personId in entries.Select(e => e.PersonId).Distinct())
+            await RequireLoggableAsync(personId, jobId, taskId, cancellationToken);
+
+        foreach (var entry in entries)
+        {
+            entry.JobId = jobId;
+            entry.TaskId = taskId;
+            entry.UpdatedAt = DateTime.UtcNow;
+        }
+        await _context.SaveChangesAsync(cancellationToken);
+        await _alerts.CheckAsync([.. previousJobs, jobId], cancellationToken);
+        return entries.Count;
     }
 
     public async Task<bool> DeleteAsync(TsViewer viewer, Guid entryId, CancellationToken cancellationToken = default)

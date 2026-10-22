@@ -242,13 +242,41 @@ public sealed record TsSummaryRowDto(Guid Id, string Name, decimal Hours);
 
 public sealed record TsSummaryDto(decimal Total, IReadOnlyList<TsSummaryRowDto> Rows);
 
-public sealed record TsDetailedDto(decimal Total, int Count, IReadOnlyList<string> Headers, IReadOnlyList<IReadOnlyList<string>> Rows);
+public sealed record TsDetailedEntryDto(
+    Guid Id,
+    Guid PersonId,
+    DateOnly Date,
+    Guid JobId,
+    string JobCode,
+    string JobTitle,
+    string ClientName,
+    Guid TaskId,
+    string TaskName,
+    decimal Hours,
+    string Notes,
+    DateTime? TimerStartedAt,
+    string PersonName,
+    string? Roles);
+
+public sealed record TsDetailedGroupDto(string Label, decimal Hours, IReadOnlyList<TsDetailedEntryDto> Rows);
+
+public sealed record TsDetailedDto(decimal Total, int Count, int Shown, IReadOnlyList<TsDetailedGroupDto> Groups);
+
+public sealed record TsReportOptionDto(Guid Id, string Name, bool Archived);
 
 public sealed record TsReportOptionsDto(
-    IReadOnlyList<TsNamedDto> Clients,
-    IReadOnlyList<TsNamedDto> Jobs,
-    IReadOnlyList<TsNamedDto> Tasks,
-    IReadOnlyList<TsNamedDto> People);
+    IReadOnlyList<TsReportOptionDto> Clients,
+    IReadOnlyList<TsReportOptionDto> Jobs,
+    IReadOnlyList<TsReportOptionDto> Tasks,
+    IReadOnlyList<TsReportOptionDto> People,
+    IReadOnlyList<string> Roles);
+
+public class TsMoveEntriesRequest
+{
+    public List<Guid> EntryIds { get; set; } = [];
+    public Guid JobId { get; set; }
+    public Guid TaskId { get; set; }
+}
 
 public sealed record TsSavedReportDto(Guid Id, string Name, string Query, DateTime CreatedAt);
 

@@ -34,7 +34,7 @@ public class TsReportsFunction
     public Task<HttpResponseData> Detailed(
         [HttpTrigger(AuthorizationLevel.Anonymous, "get", Route = "ts/reports/detailed")] HttpRequestData req, FunctionContext context)
         => TsHttp.Handle(req, context, _viewers, TsLevel.Member, async (viewer, ct) =>
-            await TsHttp.Ok(req, await _reports.DetailedAsync(viewer, Filter(req), ct)));
+            await TsHttp.Ok(req, await _reports.DetailedAsync(viewer, Filter(req), TsHttp.Enum(req, "groupBy", TsDetailedGroupBy.Date), ct)));
 
     [Function("TsReportOptions")]
     public Task<HttpResponseData> Options(
@@ -80,5 +80,6 @@ public class TsReportsFunction
         TsHttp.Ids(req, "jobIds"),
         TsHttp.Ids(req, "taskIds"),
         TsHttp.Ids(req, "personIds"),
+        (req.Query["roles"] ?? "").Split('|', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries),
         TsHttp.Flag(req, "openOnly"));
 }
