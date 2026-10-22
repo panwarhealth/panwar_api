@@ -207,7 +207,7 @@ public sealed record TsBookingDto(
 
 public sealed record TsScheduleDto(IReadOnlyList<TsSchedulePersonDto> People, IReadOnlyList<TsScheduleJobDto> Jobs, IReadOnlyList<TsBookingDto> Bookings);
 
-public sealed record TsJobHoursDto(Guid JobId, decimal Hours);
+public sealed record TsJobHoursDto(Guid JobId, decimal Hours, IReadOnlyList<Guid> PersonIds);
 
 public class TsShiftRequest
 {

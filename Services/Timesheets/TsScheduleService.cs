@@ -150,7 +150,8 @@ public class TsScheduleService : ITsScheduleService
             .GroupBy(b => b.JobId)
             .Select(g => new TsJobHoursDto(g.Key, g.Sum(b =>
                 TsCalendar.Days(b.StartDate > today ? b.StartDate : today, b.EndDate)
-                    .Count(d => b.OnDaysOff || TsCalendar.Capacity(people[b.PersonId], d) > 0) * b.HoursPerDay)))
+                    .Count(d => b.OnDaysOff || TsCalendar.Capacity(people[b.PersonId], d) > 0) * b.HoursPerDay),
+                g.Select(b => b.PersonId).Distinct().ToList()))
             .ToList();
     }
 
