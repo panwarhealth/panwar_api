@@ -112,17 +112,41 @@ public class TsImportService : ITsImportService
 
         var people = (await GetAsync<FcPeople>(http, "people", cancellationToken)).People;
         var byHarvestUser = await _context.TsPeople.Where(p => p.HarvestId != null).ToDictionaryAsync(p => p.HarvestId!.Value, cancellationToken);
+        var byForecast = await _context.TsPeople.Where(p => p.ForecastId != null).ToDictionaryAsync(p => p.ForecastId!.Value, cancellationToken);
+        var byName = (await _context.TsPeople.Where(p => p.ForecastId == null).ToListAsync(cancellationToken))
+            .GroupBy(p => TsNames.Full(p).ToUpperInvariant()).ToDictionary(g => g.Key, g => g.OrderBy(p => p.Archived).First());
         var personIds = new Dictionary<long, Guid>();
-        foreach (var fp in people.Where(p => p.HarvestUserId is not null && byHarvestUser.ContainsKey(p.HarvestUserId.Value)))
+        var fullDay = new Dictionary<long, decimal>();
+        foreach (var fp in people)
         {
-            var person = byHarvestUser[fp.HarvestUserId!.Value];
+            var person = fp.HarvestUserId is { } userId && byHarvestUser.TryGetValue(userId, out var linked)
+                ? linked
+                : byForecast.GetValueOrDefault(fp.Id) ?? byName.GetValueOrDefault($"{fp.FirstName} {fp.LastName}".Trim().ToUpperInvariant());
+            if (person is null)
+            {
+                if (fp.Archived) continue;
+                person = new TsPerson { Id = Guid.NewGuid(), FirstName = fp.FirstName.Trim(), LastName = fp.LastName.Trim(), IsPlaceholder = true, CreatedAt = DateTime.UtcNow };
+                _context.TsPeople.Add(person);
+            }
+            if (person.IsPlaceholder)
+            {
+                person.Title = fp.Roles.Count == 0 ? null : string.Join(", ", fp.Roles);
+                person.UpdatedAt = DateTime.UtcNow;
+            }
             var workingDays = WeekDays.Select(d => fp.WorkingDays.GetValueOrDefault(d)).ToList();
             var perDay = workingDays.Count(w => w) == 0 ? 0 : Math.Round(fp.WeeklyCapacity / 3600m / workingDays.Count(w => w), 2);
             person.ForecastId = fp.Id;
             person.DayHours = workingDays.Select(w => w ? perDay : 0).ToArray();
             personIds[fp.Id] = person.Id;
+            fullDay[fp.Id] = perDay;
         }
         await _context.SaveChangesAsync(cancellationToken);
+
+        var harvest = Client(HarvestUrl, "Harvest-Account-ID", "HARVEST_ACCOUNT_ID");
+        var tasksByHarvest = await _context.TsTasks.Where(t => t.HarvestId != null).ToDictionaryAsync(t => t.HarvestId!.Value, t => t.Id, cancellationToken);
+        var taskIds = (await PagesAsync<HvTaskAssignment>(harvest, "task_assignments", cancellationToken))
+            .Where(a => tasksByHarvest.ContainsKey(a.Task.Id))
+            .ToDictionary(a => a.Id, a => tasksByHarvest[a.Task.Id]);
 
         var projects = (await GetAsync<FcProjects>(http, "projects", cancellationToken)).Projects;
         var jobsByHarvest = await _context.TsJobs.Where(j => j.HarvestId != null).ToDictionaryAsync(j => j.HarvestId!.Value, j => j.Id, cancellationToken);
@@ -146,7 +170,7 @@ public class TsImportService : ITsImportService
         }
         all = all.DistinctBy(a => a.Id).ToList();
         var assignments = all
-            .Where(a => a.PersonId is { } pid && personIds.ContainsKey(pid) && jobIds.ContainsKey(a.ProjectId) && a.Allocation is > 0)
+            .Where(a => a.PersonId is { } pid && personIds.ContainsKey(pid) && jobIds.ContainsKey(a.ProjectId) && (a.Allocation ?? fullDay[pid]) > 0)
             .ToList();
         var skipped = all.Count - assignments.Count;
         if (skipped > 0) _logger.LogWarning("Forecast import skipped {Count} bookings with no matching person or job", skipped);
@@ -163,11 +187,18 @@ public class TsImportService : ITsImportService
             booking.JobId = jobIds[a.ProjectId];
             booking.StartDate = a.StartDate;
             booking.EndDate = a.EndDate;
-            booking.HoursPerDay = Math.Round(a.Allocation!.Value / 3600m, 2);
+            booking.TaskId = a.HarvestProjectTaskId is { } taskAssignment ? taskIds.GetValueOrDefault(taskAssignment) : null;
+            booking.HoursPerDay = a.Allocation is { } seconds ? Math.Round(seconds / 3600m, 4) : fullDay[a.PersonId!.Value];
             booking.Note = string.IsNullOrWhiteSpace(a.Notes) ? null : a.Notes.Trim();
             booking.UpdatedAt = DateTime.UtcNow;
         }
         await _context.SaveChangesAsync(cancellationToken);
+
+        var seen = all.Select(a => a.Id).ToList();
+        var removed = await _context.TsBookings
+            .Where(b => b.ForecastId != null && b.EndDate >= from && b.StartDate <= to && !seen.Contains(b.ForecastId.Value))
+            .ExecuteDeleteAsync(cancellationToken);
+        _logger.LogInformation("Removed {Count} bookings deleted in Forecast", removed);
         return new TsImportResultDto(0, 0, personIds.Count, jobIds.Count, 0, assignments.Count);
     }
 
@@ -373,7 +404,7 @@ public class TsImportService : ITsImportService
         public HvRef Client { get; set; } = new();
     }
 
-    private sealed class HvTaskAssignment { public HvRef Project { get; set; } = new(); public HvRef Task { get; set; } = new(); public decimal? Budget { get; set; } }
+    private sealed class HvTaskAssignment { public long Id { get; set; } public HvRef Project { get; set; } = new(); public HvRef Task { get; set; } = new(); public decimal? Budget { get; set; } }
     private sealed class HvUserAssignment { public HvRef Project { get; set; } = new(); public HvRef User { get; set; } = new(); public bool IsProjectManager { get; set; } }
 
     private sealed class HvEntry
@@ -395,6 +426,10 @@ public class TsImportService : ITsImportService
     {
         public long Id { get; set; }
         public long? HarvestUserId { get; set; }
+        public string FirstName { get; set; } = "";
+        public string LastName { get; set; } = "";
+        public List<string> Roles { get; set; } = [];
+        public bool Archived { get; set; }
         public int WeeklyCapacity { get; set; }
         public Dictionary<string, bool> WorkingDays { get; set; } = [];
     }
@@ -411,6 +446,7 @@ public class TsImportService : ITsImportService
         public DateOnly StartDate { get; set; }
         public DateOnly EndDate { get; set; }
         public int? Allocation { get; set; }
+        public long? HarvestProjectTaskId { get; set; }
         public string? Notes { get; set; }
     }
 }

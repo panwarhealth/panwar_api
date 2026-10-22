@@ -13,11 +13,13 @@ public class TsScheduleFunction
 
     private readonly ITsViewerService _viewers;
     private readonly ITsScheduleService _schedule;
+    private readonly ITsScheduleExportService _export;
 
-    public TsScheduleFunction(ITsViewerService viewers, ITsScheduleService schedule)
+    public TsScheduleFunction(ITsViewerService viewers, ITsScheduleService schedule, ITsScheduleExportService export)
     {
         _viewers = viewers;
         _schedule = schedule;
+        _export = export;
     }
 
     [Function("TsGetSchedule")]
@@ -27,6 +29,21 @@ public class TsScheduleFunction
         {
             var weeks = int.TryParse(req.Query["weeks"], out var w) ? Math.Clamp(w, 1, MaxWeeks) : 3;
             return await TsHttp.Ok(req, await _schedule.GetAsync(TsHttp.RequiredDate(req, "weekStart"), weeks, ct));
+        });
+
+    [Function("TsExportSchedule")]
+    public Task<HttpResponseData> Export(
+        [HttpTrigger(AuthorizationLevel.Anonymous, "get", Route = "ts/schedule/export.csv")] HttpRequestData req, FunctionContext context)
+        => TsHttp.Handle(req, context, _viewers, TsLevel.Manager, async (_, ct) =>
+        {
+            var request = new TsScheduleExportRequest(
+                TsHttp.Enum(req, "kind", TsScheduleExportKind.Projects),
+                TsHttp.Flag(req, "tasks"),
+                TsHttp.Enum(req, "period", TsScheduleExportPeriod.Week),
+                TsHttp.Flag(req, "rows"),
+                TsHttp.RequiredDate(req, "from"),
+                TsHttp.RequiredDate(req, "to"));
+            return await TsHttp.File(req, await _export.CsvAsync(request, ct), "text/csv", "schedule-export.csv");
         });
 
     [Function("TsCreateBooking")]

@@ -223,7 +223,7 @@ public class AppDbContext : DbContext
         {
             entity.ToTable("ts_booking");
             entity.HasKey(e => e.Id);
-            entity.Property(e => e.HoursPerDay).HasPrecision(5, 2);
+            entity.Property(e => e.HoursPerDay).HasPrecision(7, 4);
             entity.Property(e => e.Note).HasMaxLength(500);
             entity.Property(e => e.CreatedAt).HasDefaultValueSql("CURRENT_TIMESTAMP");
             entity.Property(e => e.UpdatedAt).HasDefaultValueSql("CURRENT_TIMESTAMP");

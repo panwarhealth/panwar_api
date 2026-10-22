@@ -108,6 +108,7 @@ var host = new HostBuilder()
         services.AddScoped<ITsPeopleService, TsPeopleService>();
         services.AddScoped<ITsTeamService, TsTeamService>();
         services.AddScoped<ITsScheduleService, TsScheduleService>();
+        services.AddScoped<ITsScheduleExportService, TsScheduleExportService>();
         services.AddScoped<ITsReportService, TsReportService>();
         services.AddSingleton<ITsReportExporter, TsReportExporter>();
         services.AddScoped<ITsSavedReportService, TsSavedReportService>();

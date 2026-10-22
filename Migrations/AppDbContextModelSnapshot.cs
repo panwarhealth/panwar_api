@@ -1872,8 +1872,8 @@ namespace Panwar.Api.Migrations
                         .HasColumnType("bigint");
 
                     b.Property<decimal>("HoursPerDay")
-                        .HasPrecision(5, 2)
-                        .HasColumnType("numeric(5,2)");
+                        .HasPrecision(7, 4)
+                        .HasColumnType("numeric(7,4)");
 
                     b.Property<Guid>("JobId")
                         .HasColumnType("uuid");
