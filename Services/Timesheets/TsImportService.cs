@@ -174,6 +174,15 @@ public class TsImportService : ITsImportService
         var forecastClients = (await GetAsync<FcClients>(http, "clients", cancellationToken)).Clients.ToDictionary(c => c.Id);
         foreach (var fp in projects.Where(p => !jobIds.ContainsKey(p.Id) && p.ClientId is not null && all.Any(a => a.ProjectId == p.Id)))
             jobIds[fp.Id] = await AddForecastJobAsync(fp, forecastClients[fp.ClientId!.Value], cancellationToken);
+
+        var colorByJob = projects
+            .Where(p => jobIds.ContainsKey(p.Id) && !(p.HarvestId is null && p.Name == ForecastTimeOff))
+            .GroupBy(p => jobIds[p.Id])
+            .ToDictionary(g => g.Key, g => g.First().Color);
+        var colorJobIds = colorByJob.Keys.ToList();
+        foreach (var job in await _context.TsJobs.Where(j => colorJobIds.Contains(j.Id)).ToListAsync(cancellationToken))
+            job.Color = colorByJob[job.Id];
+        await _context.SaveChangesAsync(cancellationToken);
         var assignments = all
             .Where(a => a.PersonId is { } pid && personIds.ContainsKey(pid) && jobIds.ContainsKey(a.ProjectId) && (a.Allocation ?? fullDay[pid]) > 0)
             .ToList();
@@ -473,7 +482,7 @@ public class TsImportService : ITsImportService
     }
 
     private sealed class FcProjects { public List<FcProject> Projects { get; set; } = []; }
-    private sealed class FcProject { public long Id { get; set; } public string Name { get; set; } = ""; public string? Code { get; set; } public long? HarvestId { get; set; } public long? ClientId { get; set; } public bool Archived { get; set; } }
+    private sealed class FcProject { public long Id { get; set; } public string Name { get; set; } = ""; public string? Code { get; set; } public long? HarvestId { get; set; } public long? ClientId { get; set; } public bool Archived { get; set; } public string? Color { get; set; } }
     private sealed class FcClients { public List<FcClient> Clients { get; set; } = []; }
     private sealed class FcClient { public long Id { get; set; } public string Name { get; set; } = ""; public long? HarvestId { get; set; } }
     private sealed class FcAssignments { public List<FcAssignment> Assignments { get; set; } = []; }

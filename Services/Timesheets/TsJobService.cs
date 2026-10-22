@@ -15,6 +15,7 @@ public enum TsJobStatus
 public interface ITsJobService
 {
     Task<IReadOnlyList<TsJobRowDto>> ListAsync(TsJobStatus status, CancellationToken cancellationToken = default);
+    Task<IReadOnlyList<TsColorLabelDto>> ColorLabelsAsync(CancellationToken cancellationToken = default);
     Task<TsJobDetailDto?> GetAsync(Guid jobId, DateOnly? from, DateOnly? to, CancellationToken cancellationToken = default);
     Task<TsNextCodeDto> NextCodeAsync(Guid clientId, CancellationToken cancellationToken = default);
     Task<TsJobDetailDto> CreateAsync(TsJobWriteRequest data, CancellationToken cancellationToken = default);
@@ -49,9 +50,16 @@ public class TsJobService : ITsJobService
                 j.Id, j.Code, j.Title, j.ClientId, j.Client.Name,
                 _context.TsEntries.Where(e => e.JobId == j.Id).Sum(e => (decimal?)e.Hours) ?? 0,
                 j.Archived,
-                j.IsLeave))
+                j.IsLeave,
+                j.Color))
             .ToListAsync(cancellationToken);
     }
+
+    public async Task<IReadOnlyList<TsColorLabelDto>> ColorLabelsAsync(CancellationToken cancellationToken = default)
+        => await _context.TsColorLabels.AsNoTracking()
+            .OrderBy(c => c.SortOrder)
+            .Select(c => new TsColorLabelDto(c.Key, c.Name))
+            .ToListAsync(cancellationToken);
 
     public async Task<TsJobDetailDto?> GetAsync(Guid jobId, DateOnly? from, DateOnly? to, CancellationToken cancellationToken = default)
     {
@@ -104,7 +112,7 @@ public class TsJobService : ITsJobService
         return new TsJobDetailDto(
             job.Id, job.Code, job.Title, job.ClientId, job.Client.Name, job.Archived, job.IsLeave, job.Everyone,
             job.AlertPercent, job.TrelloCardUrl, job.OpenedOn, byDate.Sum(d => d.Hours),
-            budgets.Count == 0 ? null : budgets.Sum(), tasks, people, weeks);
+            budgets.Count == 0 ? null : budgets.Sum(), tasks, people, weeks, job.Color);
     }
 
     public async Task<TsNextCodeDto> NextCodeAsync(Guid clientId, CancellationToken cancellationToken = default)
@@ -114,12 +122,12 @@ public class TsJobService : ITsJobService
         var last = await _context.TsJobs.AsNoTracking()
             .Where(j => j.ClientId == clientId)
             .OrderByDescending(j => j.OpenedOn).ThenByDescending(j => j.CreatedAt)
-            .Select(j => j.Code + " " + j.Title)
+            .Select(j => new { Label = j.Code + " " + j.Title, j.Color })
             .FirstOrDefaultAsync(cancellationToken);
-        if (client.SuppliesOwnCodes || string.IsNullOrEmpty(client.CodePrefix)) return new TsNextCodeDto(null, last);
+        if (client.SuppliesOwnCodes || string.IsNullOrEmpty(client.CodePrefix)) return new TsNextCodeDto(null, last?.Label, last?.Color);
 
         var codes = await _context.TsJobs.AsNoTracking().Where(j => j.ClientId == clientId).Select(j => j.Code).ToListAsync(cancellationToken);
-        return new TsNextCodeDto(TsJobCodes.Next(client.CodePrefix, codes), last);
+        return new TsNextCodeDto(TsJobCodes.Next(client.CodePrefix, codes), last?.Label, last?.Color);
     }
 
     public async Task<TsJobDetailDto> CreateAsync(TsJobWriteRequest data, CancellationToken cancellationToken = default)
@@ -200,6 +208,9 @@ public class TsJobService : ITsJobService
         job.Code = code;
         job.Title = title;
         job.IsLeave = data.IsLeave;
+        if (data.Color is not null && !await _context.TsColorLabels.AnyAsync(c => c.Key == data.Color, cancellationToken))
+            throw new TsValidationException("Pick a colour from the list");
+        job.Color = data.Color;
         job.AlertPercent = data.AlertPercent;
         job.Everyone = activePeople.All(id => people.Any(p => p.PersonId == id));
         job.UpdatedAt = DateTime.UtcNow;

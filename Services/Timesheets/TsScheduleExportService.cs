@@ -47,7 +47,7 @@ public class TsScheduleExportService : ITsScheduleExportService
 
     private sealed record Bucket(string Label, DateOnly From, DateOnly To);
 
-    private sealed record Booking(Guid PersonId, bool IsLeave, string Client, string Title, string Code, string Task,
+    private sealed record Booking(Guid PersonId, bool IsLeave, string Client, string Title, string Code, string Label, string Task,
         DateOnly StartDate, DateOnly EndDate, decimal HoursPerDay, bool OnDaysOff);
 
     public async Task<byte[]> CsvAsync(TsScheduleExportRequest request, CancellationToken cancellationToken = default)
@@ -64,6 +64,7 @@ public class TsScheduleExportService : ITsScheduleExportService
         var bookings = (await _context.TsBookings.AsNoTracking()
             .Where(b => b.StartDate <= request.To && b.EndDate >= request.From)
             .Select(b => new Booking(b.PersonId, b.Job.IsLeave, b.Job.Client.Name, b.Job.Title, b.Job.Code,
+                _context.TsColorLabels.Where(c => c.Key == b.Job.Color).Select(c => c.Name).FirstOrDefault() ?? "",
                 b.Task == null ? "" : b.Task.Name, b.StartDate, b.EndDate, b.HoursPerDay, b.OnDaysOff))
             .ToListAsync(cancellationToken))
             .Where(b => byPerson.ContainsKey(b.PersonId))
@@ -95,6 +96,7 @@ public class TsScheduleExportService : ITsScheduleExportService
                 Client: b.IsLeave ? "" : b.Client,
                 Title: b.IsLeave ? TimeOff : b.Title,
                 Code: b.IsLeave ? "" : b.Code,
+                Label: b.IsLeave ? TimeOffLabel : b.Label,
                 Task: request.Tasks && !b.IsLeave ? b.Task : "",
                 b.PersonId))
             .Select(g => (g.Key, Person: byPerson[g.Key.PersonId], Hours: buckets.Select(bucket => g.Sum(b => hours(b, bucket))).ToList()))
@@ -111,9 +113,9 @@ public class TsScheduleExportService : ITsScheduleExportService
         if (request.Tasks) headers.Add("Task");
         headers.AddRange(["Person", "Roles"]);
 
-        IEnumerable<string> Describe((bool IsLeave, string Client, string Title, string Code, string Task, Guid PersonId) key, TsPerson person)
+        IEnumerable<string> Describe((bool IsLeave, string Client, string Title, string Code, string Label, string Task, Guid PersonId) key, TsPerson person)
         {
-            var fields = new List<string> { Quote(key.Client), Quote(key.Title), Quote(key.Code), key.IsLeave ? TimeOffLabel : "", "\"\"" };
+            var fields = new List<string> { Quote(key.Client), Quote(key.Title), Quote(key.Code), Quote(key.Label), "\"\"" };
             if (request.Tasks) fields.Add(Quote(key.Task));
             fields.AddRange([Quote(TsNames.Full(person)), QuoteList(person.Title)]);
             return fields;

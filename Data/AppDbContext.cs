@@ -57,6 +57,7 @@ public class AppDbContext : DbContext
     public DbSet<TsClient> TsClients { get; set; } = null!;
     public DbSet<TsTask> TsTasks { get; set; } = null!;
     public DbSet<TsJob> TsJobs { get; set; } = null!;
+    public DbSet<TsColorLabel> TsColorLabels { get; set; } = null!;
     public DbSet<TsJobTask> TsJobTasks { get; set; } = null!;
     public DbSet<TsJobPerson> TsJobPeople { get; set; } = null!;
     public DbSet<TsPerson> TsPeople { get; set; } = null!;
@@ -136,6 +137,24 @@ public class AppDbContext : DbContext
             entity.HasIndex(e => e.HarvestId).IsUnique();
         });
 
+        modelBuilder.Entity<TsColorLabel>(entity =>
+        {
+            entity.ToTable("ts_color_label");
+            entity.HasKey(e => e.Key);
+            entity.Property(e => e.Key).HasMaxLength(16);
+            entity.Property(e => e.Name).IsRequired().HasMaxLength(40);
+            entity.HasData(
+                new TsColorLabel { Key = "red", Name = "Reckitt", SortOrder = 1 },
+                new TsColorLabel { Key = "orange", Name = "orange", SortOrder = 2 },
+                new TsColorLabel { Key = "magenta", Name = "magenta", SortOrder = 3 },
+                new TsColorLabel { Key = "purple", Name = "purple", SortOrder = 4 },
+                new TsColorLabel { Key = "blue", Name = "blue", SortOrder = 5 },
+                new TsColorLabel { Key = "aqua", Name = "aqua", SortOrder = 6 },
+                new TsColorLabel { Key = "green", Name = "green", SortOrder = 7 },
+                new TsColorLabel { Key = "gray", Name = "gray", SortOrder = 8 },
+                new TsColorLabel { Key = "black", Name = "black", SortOrder = 9 });
+        });
+
         modelBuilder.Entity<TsJob>(entity =>
         {
             entity.ToTable("ts_job");
@@ -143,6 +162,7 @@ public class AppDbContext : DbContext
             entity.Property(e => e.Code).IsRequired().HasMaxLength(40);
             entity.Property(e => e.Title).IsRequired().HasMaxLength(300);
             entity.Property(e => e.TrelloCardUrl).HasMaxLength(500);
+            entity.Property(e => e.Color).HasMaxLength(16);
             entity.Property(e => e.CreatedAt).HasDefaultValueSql("CURRENT_TIMESTAMP");
             entity.Property(e => e.UpdatedAt).HasDefaultValueSql("CURRENT_TIMESTAMP");
             entity.HasOne(e => e.Client).WithMany(c => c.Jobs).HasForeignKey(e => e.ClientId).OnDelete(DeleteBehavior.Restrict);

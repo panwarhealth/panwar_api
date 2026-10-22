@@ -18,6 +18,12 @@ public class TsJobsFunction
         _jobs = jobs;
     }
 
+    [Function("TsColorLabels")]
+    public Task<HttpResponseData> ColorLabels(
+        [HttpTrigger(AuthorizationLevel.Anonymous, "get", Route = "ts/color-labels")] HttpRequestData req, FunctionContext context)
+        => TsHttp.Handle(req, context, _viewers, TsLevel.Member, async (_, ct) =>
+            await TsHttp.Ok(req, new { labels = await _jobs.ColorLabelsAsync(ct) }));
+
     [Function("TsListJobs")]
     public Task<HttpResponseData> List(
         [HttpTrigger(AuthorizationLevel.Anonymous, "get", Route = "ts/jobs")] HttpRequestData req, FunctionContext context)

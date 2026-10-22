@@ -1995,6 +1995,81 @@ namespace Panwar.Api.Migrations
                     b.ToTable("ts_client", "panwar_portals");
                 });
 
+            modelBuilder.Entity("Panwar.Api.Models.TsColorLabel", b =>
+                {
+                    b.Property<string>("Key")
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)");
+
+                    b.Property<int>("SortOrder")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Key");
+
+                    b.ToTable("ts_color_label", "panwar_portals");
+
+                    b.HasData(
+                        new
+                        {
+                            Key = "red",
+                            Name = "Reckitt",
+                            SortOrder = 1
+                        },
+                        new
+                        {
+                            Key = "orange",
+                            Name = "orange",
+                            SortOrder = 2
+                        },
+                        new
+                        {
+                            Key = "magenta",
+                            Name = "magenta",
+                            SortOrder = 3
+                        },
+                        new
+                        {
+                            Key = "purple",
+                            Name = "purple",
+                            SortOrder = 4
+                        },
+                        new
+                        {
+                            Key = "blue",
+                            Name = "blue",
+                            SortOrder = 5
+                        },
+                        new
+                        {
+                            Key = "aqua",
+                            Name = "aqua",
+                            SortOrder = 6
+                        },
+                        new
+                        {
+                            Key = "green",
+                            Name = "green",
+                            SortOrder = 7
+                        },
+                        new
+                        {
+                            Key = "gray",
+                            Name = "gray",
+                            SortOrder = 8
+                        },
+                        new
+                        {
+                            Key = "black",
+                            Name = "black",
+                            SortOrder = 9
+                        });
+                });
+
             modelBuilder.Entity("Panwar.Api.Models.TsEntry", b =>
                 {
                     b.Property<Guid>("Id")
@@ -2076,6 +2151,10 @@ namespace Panwar.Api.Migrations
                         .IsRequired()
                         .HasMaxLength(40)
                         .HasColumnType("character varying(40)");
+
+                    b.Property<string>("Color")
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
 
                     b.Property<DateTime>("CreatedAt")
                         .ValueGeneratedOnAdd()

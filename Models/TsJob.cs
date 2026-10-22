@@ -8,6 +8,7 @@ public class TsJob : IHarvestRecord
     public required string Title { get; set; }
     public bool Archived { get; set; }
     public bool IsLeave { get; set; }
+    public string? Color { get; set; }
     public bool Everyone { get; set; }
     public int? AlertPercent { get; set; }
     public DateTime? AlertSentAt { get; set; }

@@ -29,7 +29,8 @@ public class TsScheduleService : ITsScheduleService
         b.TaskId, b.StartDate, b.EndDate, b.HoursPerDay, b.OnDaysOff, b.Note,
         b.RepeatSetId == null ? 1 : _context.TsBookings.Count(x => x.RepeatSetId == b.RepeatSetId && x.StartDate >= b.StartDate),
         b.UpdatedAt,
-        b.UpdatedBy == null ? null : (b.UpdatedBy.FirstName + " " + b.UpdatedBy.LastName).Trim());
+        b.UpdatedBy == null ? null : (b.UpdatedBy.FirstName + " " + b.UpdatedBy.LastName).Trim(),
+        b.Job.Color);
 
     private readonly AppDbContext _context;
 
@@ -80,8 +81,8 @@ public class TsScheduleService : ITsScheduleService
 
         var jobs = bookings
             .Where(b => byPerson.ContainsKey(b.PersonId))
-            .GroupBy(b => new { b.JobId, b.JobCode, b.JobTitle, b.ClientName, b.IsLeave })
-            .Select(g => new TsScheduleJobDto(g.Key.JobId, g.Key.JobCode, g.Key.JobTitle, g.Key.ClientName, g.Key.IsLeave,
+            .GroupBy(b => new { b.JobId, b.JobCode, b.JobTitle, b.ClientName, b.IsLeave, b.JobColor })
+            .Select(g => new TsScheduleJobDto(g.Key.JobId, g.Key.JobCode, g.Key.JobTitle, g.Key.ClientName, g.Key.IsLeave, g.Key.JobColor,
                 days.Chunk(7).Select(week => g.Sum(b => week.Count(d =>
                     b.StartDate <= d && b.EndDate >= d && (b.OnDaysOff || TsCalendar.Capacity(byPerson[b.PersonId], d) > 0)) * b.HoursPerDay)).ToList()))
             .OrderBy(j => j.ClientName).ThenBy(j => j.JobCode)

@@ -47,7 +47,9 @@ public class TsStarRequest
     public bool Starred { get; set; }
 }
 
-public sealed record TsJobRowDto(Guid Id, string Code, string Title, Guid ClientId, string ClientName, decimal Spent, bool Archived, bool IsLeave);
+public sealed record TsJobRowDto(Guid Id, string Code, string Title, Guid ClientId, string ClientName, decimal Spent, bool Archived, bool IsLeave, string? Color);
+
+public sealed record TsColorLabelDto(string Key, string Name);
 
 public sealed record TsJobTaskDto(Guid TaskId, string Name, decimal? Budget, decimal Spent);
 
@@ -71,7 +73,8 @@ public sealed record TsJobDetailDto(
     decimal? Budget,
     IReadOnlyList<TsJobTaskDto> Tasks,
     IReadOnlyList<TsJobPersonDto> People,
-    IReadOnlyList<TsWeekHoursDto> Weeks);
+    IReadOnlyList<TsWeekHoursDto> Weeks,
+    string? Color);
 
 public class TsJobTaskWrite
 {
@@ -91,13 +94,14 @@ public class TsJobWriteRequest
     public string Code { get; set; } = "";
     public string Title { get; set; } = "";
     public bool IsLeave { get; set; }
+    public string? Color { get; set; }
     public int? AlertPercent { get; set; }
     public List<TsJobTaskWrite> Tasks { get; set; } = [];
     public List<TsJobPersonWrite> People { get; set; } = [];
     public bool CreateTrelloCard { get; set; }
 }
 
-public sealed record TsNextCodeDto(string? Code, string? LastJob);
+public sealed record TsNextCodeDto(string? Code, string? LastJob, string? LastColor);
 
 public class TsArchiveRequest
 {
@@ -185,7 +189,7 @@ public sealed record TsSchedulePersonDto(
     IReadOnlyList<TsScheduleWeekDto> Weeks,
     IReadOnlyList<TsScheduleDayDto> Days);
 
-public sealed record TsScheduleJobDto(Guid JobId, string JobCode, string JobTitle, string ClientName, bool IsLeave, IReadOnlyList<decimal> Weeks);
+public sealed record TsScheduleJobDto(Guid JobId, string JobCode, string JobTitle, string ClientName, bool IsLeave, string? Color, IReadOnlyList<decimal> Weeks);
 
 public sealed record TsBookingDto(
     Guid Id,
@@ -203,7 +207,8 @@ public sealed record TsBookingDto(
     string? Note,
     int RepeatWeeks,
     DateTime UpdatedAt,
-    string? UpdatedByName);
+    string? UpdatedByName,
+    string? JobColor);
 
 public sealed record TsScheduleDto(IReadOnlyList<TsSchedulePersonDto> People, IReadOnlyList<TsScheduleJobDto> Jobs, IReadOnlyList<TsBookingDto> Bookings);
 
