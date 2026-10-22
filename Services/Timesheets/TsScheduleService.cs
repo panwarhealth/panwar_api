@@ -12,6 +12,7 @@ public interface ITsScheduleService
     Task<TsBookingDto> CreateAsync(TsBookingWriteRequest data, Guid byPersonId, CancellationToken cancellationToken = default);
     Task<TsBookingDto?> UpdateAsync(Guid bookingId, TsBookingWriteRequest data, Guid byPersonId, CancellationToken cancellationToken = default);
     Task<bool> DeleteAsync(Guid bookingId, bool following, CancellationToken cancellationToken = default);
+    Task<TsBookingDto?> MoveAsync(Guid bookingId, DateOnly startDate, DateOnly endDate, Guid byPersonId, CancellationToken cancellationToken = default);
 }
 
 public class TsScheduleService : ITsScheduleService
@@ -128,6 +129,21 @@ public class TsScheduleService : ITsScheduleService
             : _context.TsBookings.Where(b => b.Id == bookingId);
         await doomed.ExecuteDeleteAsync(cancellationToken);
         return true;
+    }
+
+    public async Task<TsBookingDto?> MoveAsync(Guid bookingId, DateOnly startDate, DateOnly endDate, Guid byPersonId, CancellationToken cancellationToken = default)
+    {
+        if (endDate < startDate) throw new TsValidationException("The end date is before the start date");
+        if (endDate.DayNumber - startDate.DayNumber > MaxDays) throw new TsValidationException("Bookings can be up to two years long");
+        var booking = await _context.TsBookings.FirstOrDefaultAsync(b => b.Id == bookingId, cancellationToken);
+        if (booking is null) return null;
+
+        booking.StartDate = startDate;
+        booking.EndDate = endDate;
+        booking.UpdatedById = byPersonId;
+        booking.UpdatedAt = DateTime.UtcNow;
+        await _context.SaveChangesAsync(cancellationToken);
+        return await _context.TsBookings.AsNoTracking().Where(b => b.Id == booking.Id).Select(ToDto).FirstAsync(cancellationToken);
     }
 
     private void AddRepeats(TsBooking booking, int weeks)

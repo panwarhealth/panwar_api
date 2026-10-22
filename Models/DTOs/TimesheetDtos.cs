@@ -206,6 +206,12 @@ public sealed record TsBookingDto(
 
 public sealed record TsScheduleDto(IReadOnlyList<TsSchedulePersonDto> People, IReadOnlyList<TsScheduleJobDto> Jobs, IReadOnlyList<TsBookingDto> Bookings);
 
+public class TsBookingMoveRequest
+{
+    public DateOnly StartDate { get; set; }
+    public DateOnly EndDate { get; set; }
+}
+
 public class TsBookingWriteRequest
 {
     public Guid PersonId { get; set; }

@@ -46,6 +46,15 @@ public class TsScheduleFunction
             return await TsHttp.File(req, await _export.CsvAsync(request, ct), "text/csv", "schedule-export.csv");
         });
 
+    [Function("TsMoveBooking")]
+    public Task<HttpResponseData> Move(
+        [HttpTrigger(AuthorizationLevel.Anonymous, "put", Route = "ts/bookings/{bookingId:guid}/dates")] HttpRequestData req, FunctionContext context, Guid bookingId)
+        => TsHttp.Handle(req, context, _viewers, TsLevel.Manager, async (viewer, ct) =>
+        {
+            var body = await TsHttp.Body<TsBookingMoveRequest>(req);
+            return await TsHttp.OkOrNotFound(req, await _schedule.MoveAsync(bookingId, body.StartDate, body.EndDate, viewer.PersonId, ct));
+        });
+
     [Function("TsCreateBooking")]
     public Task<HttpResponseData> Create(
         [HttpTrigger(AuthorizationLevel.Anonymous, "post", Route = "ts/bookings")] HttpRequestData req, FunctionContext context)
