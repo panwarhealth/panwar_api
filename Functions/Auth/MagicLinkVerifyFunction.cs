@@ -53,7 +53,7 @@ public class MagicLinkVerifyFunction
             }
 
             var roles = user.Roles.Select(r => r.Role).ToArray();
-            var token = _jwtService.GenerateToken(user.Id, user.Email, user.Type, roles);
+            var token = _jwtService.GenerateToken(user.Id, user.Email, user.Type, roles, null);
 
             var response = req.CreateResponse(HttpStatusCode.OK);
             CookieHelper.SetAuthCookie(response, req, token);

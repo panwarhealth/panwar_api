@@ -12,6 +12,7 @@ public class JwtService : IJwtService
 {
     public const string ClaimUserType = "user_type";
     public const string ClaimRole = "role";
+    public const string ClaimEntraObjectId = "entra_oid";
 
     private readonly SymmetricSecurityKey _key;
     private readonly string _issuer;
@@ -28,7 +29,7 @@ public class JwtService : IJwtService
         _expiryDays = int.TryParse(configuration["JWT_EXPIRY_DAYS"], out var days) ? days : 365;
     }
 
-    public string GenerateToken(Guid userId, string email, UserType userType, IEnumerable<string> roles)
+    public string GenerateToken(Guid userId, string email, UserType userType, IEnumerable<string> roles, string? entraObjectId)
     {
         var claims = new List<Claim>
         {
@@ -38,6 +39,11 @@ public class JwtService : IJwtService
             new(ClaimUserType, userType.ToString().ToLowerInvariant()),
             new(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString())
         };
+
+        if (entraObjectId is not null)
+        {
+            claims.Add(new Claim(ClaimEntraObjectId, entraObjectId));
+        }
 
         foreach (var role in roles)
         {

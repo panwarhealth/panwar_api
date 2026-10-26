@@ -73,6 +73,7 @@ var host = new HostBuilder()
         services.AddSingleton<IEmailTemplateService, EmailTemplateService>();
         services.AddSingleton<IEntraTokenValidator, EntraTokenValidator>();
         services.AddSingleton<IGraphService, GraphService>();
+        services.AddSingleton<IEmployeeRoleService, EmployeeRoleService>();
 
         services.AddScoped<ICloudflareR2Service, CloudflareR2Service>();
 

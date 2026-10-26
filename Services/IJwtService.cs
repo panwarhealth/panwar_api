@@ -10,7 +10,7 @@ public interface IJwtService
     /// scoped to a single client via the JWT — memberships are looked up per
     /// request from the user_client junction table.
     /// </summary>
-    string GenerateToken(Guid userId, string email, UserType userType, IEnumerable<string> roles);
+    string GenerateToken(Guid userId, string email, UserType userType, IEnumerable<string> roles, string? entraObjectId);
 
     /// <summary>
     /// Validate a JWT and return the principal, or null if validation failed

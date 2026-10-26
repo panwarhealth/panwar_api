@@ -71,7 +71,7 @@ public class EntraExchangeFunction
             var user = await _authService.GetOrCreateEmployeeUserAsync(
                 entraResult.ObjectId, entraResult.Email, entraResult.Name);
 
-            var token = _jwtService.GenerateToken(user.Id, user.Email, user.Type, entraResult.Roles);
+            var token = _jwtService.GenerateToken(user.Id, user.Email, user.Type, entraResult.Roles, entraResult.ObjectId);
 
             var response = req.CreateResponse(HttpStatusCode.OK);
             CookieHelper.SetAuthCookie(response, req, token);
