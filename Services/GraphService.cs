@@ -52,7 +52,7 @@ public class GraphService : IGraphService
     public async Task<List<GraphUser>> GetUsersWithRolesAsync(CancellationToken cancellationToken = default)
     {
         var token = await GetTokenAsync(cancellationToken);
-        await EnsureAppMetadataAsync(token, cancellationToken);
+        await LoadAppMetadataAsync(token, cancellationToken);
 
         var users = new List<GraphUser>();
         var url = "https://graph.microsoft.com/v1.0/users?$select=id,displayName,mail,userPrincipalName&$filter=accountEnabled eq true and userType eq 'Member' and endsWith(userPrincipalName,'panwarhealth.com.au')&$count=true&$top=999";
@@ -115,7 +115,7 @@ public class GraphService : IGraphService
     public async Task<string> AssignRoleAsync(string userObjectId, string roleValue, CancellationToken cancellationToken = default)
     {
         var token = await GetTokenAsync(cancellationToken);
-        await EnsureAppMetadataAsync(token, cancellationToken);
+        await LoadAppMetadataAsync(token, cancellationToken);
 
         var roleEntry = _appRoles!.FirstOrDefault(r => r.Value.Value == roleValue);
         if (roleEntry.Key is null)
@@ -152,7 +152,7 @@ public class GraphService : IGraphService
     public async Task RemoveRoleAsync(string userObjectId, string assignmentId, CancellationToken cancellationToken = default)
     {
         var token = await GetTokenAsync(cancellationToken);
-        await EnsureAppMetadataAsync(token, cancellationToken);
+        await LoadAppMetadataAsync(token, cancellationToken);
 
         try
         {
@@ -208,10 +208,8 @@ public class GraphService : IGraphService
         return result.AccessToken;
     }
 
-    private async Task EnsureAppMetadataAsync(string token, CancellationToken cancellationToken)
+    private async Task LoadAppMetadataAsync(string token, CancellationToken cancellationToken)
     {
-        if (_servicePrincipalId is not null && _appRoles is not null) return;
-
         var spJson = await GraphGetAsync(token,
             $"https://graph.microsoft.com/v1.0/servicePrincipals?$filter=appId eq '{_clientId}'",
             cancellationToken);
@@ -225,7 +223,7 @@ public class GraphService : IGraphService
             .Where(r => r.IsEnabled)
             .ToDictionary(r => r.Id, r => (r.Value, r.DisplayName));
 
-        _logger.LogInformation("Loaded {Count} app roles for service principal {SpId}",
+        _logger.LogDebug("Loaded {Count} app roles for service principal {SpId}",
             _appRoles.Count, _servicePrincipalId);
     }
 
