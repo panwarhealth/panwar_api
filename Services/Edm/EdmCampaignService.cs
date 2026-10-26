@@ -5,6 +5,7 @@ using Microsoft.Extensions.Configuration;
 using Panwar.Api.Data;
 using Panwar.Api.Models;
 using Panwar.Api.Models.DTOs;
+using Panwar.Api.Infrastructure.PublicAssets;
 using Panwar.Api.Models.Enums;
 
 namespace Panwar.Api.Services.Edm;
@@ -29,10 +30,10 @@ public class EdmCampaignService : IEdmCampaignService
 
     private readonly AppDbContext _context;
     private readonly EdmCampaignQueries _queries;
-    private readonly IEdmImageStore _images;
+    private readonly IPublicAssetStore _images;
     private readonly IConfiguration _configuration;
 
-    public EdmCampaignService(AppDbContext context, EdmCampaignQueries queries, IEdmImageStore images, IConfiguration configuration)
+    public EdmCampaignService(AppDbContext context, EdmCampaignQueries queries, IPublicAssetStore images, IConfiguration configuration)
     {
         _context = context;
         _queries = queries;

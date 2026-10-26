@@ -53,6 +53,7 @@ public class AppDbContext : DbContext
     public DbSet<EdmList> EdmLists { get; set; } = null!;
     public DbSet<EdmContact> EdmContacts { get; set; } = null!;
     public DbSet<EdmCampaign> EdmCampaigns { get; set; } = null!;
+    public DbSet<Course> Courses { get; set; } = null!;
     public DbSet<EdmRecipient> EdmRecipients { get; set; } = null!;
     public DbSet<TsClient> TsClients { get; set; } = null!;
     public DbSet<TsTask> TsTasks { get; set; } = null!;
@@ -360,6 +361,19 @@ public class AppDbContext : DbContext
             entity.HasOne(e => e.Creator).WithMany().HasForeignKey(e => e.CreatedBy).OnDelete(DeleteBehavior.Restrict);
             entity.HasOne(e => e.SentByUser).WithMany().HasForeignKey(e => e.SentBy).OnDelete(DeleteBehavior.Restrict);
             entity.HasIndex(e => new { e.Status, e.ScheduledFor });
+        });
+
+        modelBuilder.Entity<Course>(entity =>
+        {
+            entity.ToTable("course");
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Title).IsRequired().HasMaxLength(200);
+            entity.Property(e => e.Content).IsRequired().HasColumnType("jsonb");
+            entity.Property(e => e.CreatedAt).HasDefaultValueSql("CURRENT_TIMESTAMP");
+            entity.Property(e => e.UpdatedAt).HasDefaultValueSql("CURRENT_TIMESTAMP");
+            entity.HasOne(e => e.Creator).WithMany().HasForeignKey(e => e.CreatedBy).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(e => e.Updater).WithMany().HasForeignKey(e => e.UpdatedBy).OnDelete(DeleteBehavior.Restrict);
+            entity.HasIndex(e => e.UpdatedAt);
         });
 
         modelBuilder.Entity<EdmRecipient>(entity =>

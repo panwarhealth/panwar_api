@@ -8,9 +8,11 @@ using Microsoft.Extensions.Logging;
 using Npgsql;
 using Panwar.Api.Data;
 using Panwar.Api.Infrastructure.CloudflareR2;
+using Panwar.Api.Infrastructure.PublicAssets;
 using Panwar.Api.Services;
 using Panwar.Api.Services.Ai;
 using Panwar.Api.Services.Authorization;
+using Panwar.Api.Services.Courses;
 using Panwar.Api.Services.Edm;
 using Panwar.Api.Services.Import;
 using Panwar.Api.Services.Timesheets;
@@ -84,9 +86,10 @@ var host = new HostBuilder()
             .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler { AllowAutoRedirect = false });
         services.AddScoped<IUrlCheckService, UrlCheckService>();
         services.AddScoped<ILinkService, LinkService>();
+        services.AddScoped<ICourseService, CourseService>();
 
         services.AddSingleton<IEdmMailSender, AcsEdmMailSender>();
-        services.AddSingleton<IEdmImageStore, EdmImageStore>();
+        services.AddSingleton<IPublicAssetStore, PublicAssetStore>();
         services.AddScoped<IEdmSubscriptionService, EdmSubscriptionService>();
         services.AddScoped<IEdmListService, EdmListService>();
         services.AddScoped<EdmCampaignQueries>();

@@ -1,6 +1,5 @@
 using System.Globalization;
 using System.Net;
-using System.Text.Json;
 using Microsoft.Azure.Functions.Worker;
 using Microsoft.Azure.Functions.Worker.Http;
 using Panwar.Api.Models.Enums;
@@ -11,8 +10,6 @@ namespace Panwar.Api.Functions.Timesheets;
 
 public static class TsHttp
 {
-    private static readonly JsonSerializerOptions JsonOptions = new() { PropertyNameCaseInsensitive = true };
-
     public static async Task<HttpResponseData> Handle(HttpRequestData req, FunctionContext context, ITsViewerService viewers,
         TsLevel minimum, Func<TsViewer, CancellationToken, Task<HttpResponseData>> action)
     {
@@ -25,7 +22,7 @@ public static class TsHttp
             if (viewer.Level < minimum) return await req.CreateForbiddenResponseAsync();
             return await action(viewer, context.CancellationToken);
         }
-        catch (TsValidationException ex)
+        catch (RequestValidationException ex)
         {
             return await Ok(req, new { error = ex.Message }, HttpStatusCode.BadRequest);
         }
@@ -35,29 +32,15 @@ public static class TsHttp
         }
     }
 
-    public static async Task<T> Body<T>(HttpRequestData req) where T : class
-    {
-        try
-        {
-            return await JsonSerializer.DeserializeAsync<T>(req.Body, JsonOptions) ?? throw new TsValidationException("Request body required");
-        }
-        catch (JsonException)
-        {
-            throw new TsValidationException("Request body isn't valid JSON");
-        }
-    }
+    public static Task<T> Body<T>(HttpRequestData req) where T : class => req.ReadJsonAsync<T>();
 
-    public static async Task<HttpResponseData> Ok<T>(HttpRequestData req, T body, HttpStatusCode status = HttpStatusCode.OK)
-    {
-        var resp = req.CreateResponse(status);
-        await resp.WriteAsJsonAsync(body);
-        return resp;
-    }
+    public static Task<HttpResponseData> Ok<T>(HttpRequestData req, T body, HttpStatusCode status = HttpStatusCode.OK)
+        => req.JsonAsync(body, status);
 
     public static Task<HttpResponseData> OkOrNotFound<T>(HttpRequestData req, T? body) where T : class
-        => body is null ? NotFound(req) : Ok(req, body);
+        => req.JsonOrNotFoundAsync(body);
 
-    public static Task<HttpResponseData> NotFound(HttpRequestData req) => Ok(req, new { error = "Not found" }, HttpStatusCode.NotFound);
+    public static Task<HttpResponseData> NotFound(HttpRequestData req) => req.NotFoundJsonAsync();
 
     public static Task<HttpResponseData> NoContentOrNotFound(HttpRequestData req, bool found)
         => found ? Task.FromResult(req.CreateResponse(HttpStatusCode.NoContent)) : NotFound(req);

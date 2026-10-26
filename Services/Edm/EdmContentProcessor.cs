@@ -1,3 +1,4 @@
+using Panwar.Api.Shared.Extensions;
 using System.IO.Compression;
 using System.Net;
 using System.Text;
@@ -216,4 +217,4 @@ public static class EdmContentProcessor
         new UTF8Encoding(false).GetString(bytes).TrimStart('\uFEFF');
 }
 
-public class EdmValidationException(string message) : Exception(message);
+public class EdmValidationException(string message) : RequestValidationException(message);
