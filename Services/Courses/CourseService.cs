@@ -36,6 +36,9 @@ public class CourseService : ICourseService
         [".mp3"] = "audio/mpeg",
         [".vtt"] = "text/vtt",
         [".json"] = "application/json",
+        [".woff2"] = "font/woff2",
+        [".woff"] = "font/woff",
+        [".ttf"] = "font/ttf",
     };
 
     private readonly AppDbContext _context;
