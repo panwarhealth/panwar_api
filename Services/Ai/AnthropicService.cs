@@ -219,7 +219,7 @@ public class AnthropicService : IAnthropicService
         var jsonAcc = new Dictionary<int, StringBuilder>();
 
         string? stopReason = null;
-        int inputTokens = 0, outputTokens = 0;
+        int inputTokens = 0, outputTokens = 0, cacheReadTokens = 0, cacheWriteTokens = 0;
 
         // Narration state.
         var thinkingSince = (DateTime?)null;
@@ -237,6 +237,8 @@ public class AnthropicService : IAnthropicService
             {
                 case "message_start":
                     inputTokens = evt["message"]?["usage"]?["input_tokens"]?.GetValue<int>() ?? 0;
+                    cacheReadTokens = evt["message"]?["usage"]?["cache_read_input_tokens"]?.GetValue<int>() ?? 0;
+                    cacheWriteTokens = evt["message"]?["usage"]?["cache_creation_input_tokens"]?.GetValue<int>() ?? 0;
                     break;
 
                 case "content_block_start":
@@ -347,7 +349,13 @@ public class AnthropicService : IAnthropicService
         {
             ["content"] = content,
             ["stop_reason"] = stopReason,
-            ["usage"] = new JsonObject { ["input_tokens"] = inputTokens, ["output_tokens"] = outputTokens },
+            ["usage"] = new JsonObject
+            {
+                ["input_tokens"] = inputTokens,
+                ["output_tokens"] = outputTokens,
+                ["cache_read_input_tokens"] = cacheReadTokens,
+                ["cache_creation_input_tokens"] = cacheWriteTokens,
+            },
         };
     }
 

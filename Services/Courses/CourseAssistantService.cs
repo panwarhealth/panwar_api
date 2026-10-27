@@ -3,6 +3,7 @@ using System.Text.Json.Nodes;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using Panwar.Api.Data;
 using Panwar.Api.Models.DTOs;
 using Panwar.Api.Services.Ai;
@@ -17,10 +18,17 @@ public interface ICourseAssistantService
 
 public class CourseAssistantService : ICourseAssistantService
 {
+    private static readonly Dictionary<string, (decimal Input, decimal Output, decimal CacheRead, decimal CacheWrite)> PricePerMillion = new()
+    {
+        ["claude-opus-5-5"] = (4m, 20m, 0.20m, 5m),
+        ["claude-sonnet-5-5"] = (2m, 10m, 0.20m, 2.50m),
+    };
+
     private readonly AppDbContext _context;
     private readonly IAnthropicService _anthropic;
     private readonly ICourseAssistantJobs _jobs;
     private readonly IServiceScopeFactory _scopeFactory;
+    private readonly ILogger<CourseAssistantService> _logger;
     private readonly string _model;
     private readonly string _effort;
 
@@ -29,12 +37,14 @@ public class CourseAssistantService : ICourseAssistantService
         IAnthropicService anthropic,
         ICourseAssistantJobs jobs,
         IServiceScopeFactory scopeFactory,
+        ILogger<CourseAssistantService> logger,
         IConfiguration configuration)
     {
         _context = context;
         _anthropic = anthropic;
         _jobs = jobs;
         _scopeFactory = scopeFactory;
+        _logger = logger;
         _model = configuration["COURSE_AI_MODEL"] ?? "claude-opus-5-5";
         _effort = configuration["COURSE_AI_EFFORT"] ?? "high";
     }
@@ -61,8 +71,26 @@ public class CourseAssistantService : ICourseAssistantService
         {
             using var scope = _scopeFactory.CreateScope();
             var anthropic = scope.ServiceProvider.GetRequiredService<IAnthropicService>();
-            return await anthropic.CreateMessageAsync(turn, report, CancellationToken.None);
+            var reply = await anthropic.CreateMessageAsync(turn, report, CancellationToken.None);
+            if (reply["usage"] is JsonObject usage) AddCost(courseId, usage);
+            return reply;
         });
+    }
+
+    private void AddCost(Guid courseId, JsonObject usage)
+    {
+        int Tokens(string key) => usage[key]?.GetValue<int>() ?? 0;
+        var input = Tokens("input_tokens");
+        var output = Tokens("output_tokens");
+        var cacheRead = Tokens("cache_read_input_tokens");
+        var cacheWrite = Tokens("cache_creation_input_tokens");
+        decimal? cost = PricePerMillion.TryGetValue(_model, out var p)
+            ? (input * p.Input + output * p.Output + cacheRead * p.CacheRead + cacheWrite * p.CacheWrite) / 1_000_000m
+            : null;
+        usage["cost_usd"] = cost;
+        _logger.LogInformation(
+            "Course assistant turn for {CourseId} on {Model}: {Input} in, {CacheRead} cache read, {CacheWrite} cache write, {Output} out, ${Cost}",
+            courseId, _model, input, cacheRead, cacheWrite, output, cost);
     }
 
     public CourseAssistantJobState? GetTurn(Guid jobId) => _jobs.Get(jobId);
