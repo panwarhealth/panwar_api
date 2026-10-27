@@ -15,6 +15,7 @@ public interface ICourseService
     Task<CourseDto> CreateAsync(CourseWriteRequest request, Guid userId, CancellationToken cancellationToken = default);
     Task<CourseDto?> UpdateAsync(Guid id, CourseWriteRequest request, Guid userId, CancellationToken cancellationToken = default);
     Task<CourseDto?> MarkExportedAsync(Guid id, CancellationToken cancellationToken = default);
+    Task<bool> DeleteAsync(Guid id, string? confirmTitle, CancellationToken cancellationToken = default);
     Task<CourseMediaDto?> UploadMediaAsync(Guid id, string fileName, byte[] bytes, CancellationToken cancellationToken = default);
     Task<(byte[] Bytes, string ContentType)?> GetMediaAsync(Guid id, string url, CancellationToken cancellationToken = default);
     Task<CourseMediaDto?> ImportMediaAsync(Guid id, string url, CancellationToken cancellationToken = default);
@@ -108,6 +109,18 @@ public class CourseService : ICourseService
         course.LastExportedAt = DateTime.UtcNow;
         await _context.SaveChangesAsync(cancellationToken);
         return ToDto(course);
+    }
+
+    public async Task<bool> DeleteAsync(Guid id, string? confirmTitle, CancellationToken cancellationToken = default)
+    {
+        var course = await _context.Courses.FirstOrDefaultAsync(c => c.Id == id, cancellationToken);
+        if (course is null) return false;
+        if (confirmTitle?.Trim() != course.Title)
+            throw new CourseValidationException("Type the course title exactly to delete it");
+
+        _context.Courses.Remove(course);
+        await _context.SaveChangesAsync(cancellationToken);
+        return true;
     }
 
     public async Task<CourseMediaDto?> UploadMediaAsync(Guid id, string fileName, byte[] bytes, CancellationToken cancellationToken = default)

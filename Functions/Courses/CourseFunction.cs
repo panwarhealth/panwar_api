@@ -43,6 +43,12 @@ public class CourseFunction
         => req.RunAsEmployeeAsync(context, Roles, async (userId, ct) =>
             await req.JsonOrNotFoundAsync(await _courses.UpdateAsync(courseId, await req.ReadJsonAsync<CourseWriteRequest>(), userId, ct)));
 
+    [Function("CourseDelete")]
+    public Task<HttpResponseData> Delete(
+        [HttpTrigger(AuthorizationLevel.Anonymous, "delete", Route = "courses/{courseId:guid}")] HttpRequestData req, FunctionContext context, Guid courseId)
+        => req.RunAsEmployeeAsync(context, Roles, async (_, ct) =>
+            await _courses.DeleteAsync(courseId, System.Web.HttpUtility.ParseQueryString(req.Url.Query)["title"], ct) ?req.CreateResponse(HttpStatusCode.NoContent) : await req.NotFoundJsonAsync());
+
     [Function("CourseMarkExported")]
     public Task<HttpResponseData> MarkExported(
         [HttpTrigger(AuthorizationLevel.Anonymous, "post", Route = "courses/{courseId:guid}/exported")] HttpRequestData req, FunctionContext context, Guid courseId)
