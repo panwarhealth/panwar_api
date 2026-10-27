@@ -21,6 +21,7 @@ public class AnthropicService : IAnthropicService
     // thinking + response combined; the final submit_result JSON for a 21-block file plus
     // its thinking has blown 16k in practice, so give it real room.
     private const int MaxTokens = 32000;
+    private const int AssistantMaxTokens = 64000;
 
     private readonly IHttpClientFactory _httpFactory;
     private readonly ILogger<AnthropicService> _logger;
@@ -172,7 +173,7 @@ public class AnthropicService : IAnthropicService
         var body = new JsonObject
         {
             ["model"] = request.Model,
-            ["max_tokens"] = MaxTokens,
+            ["max_tokens"] = AssistantMaxTokens,
             ["stream"] = true,
             ["cache_control"] = new JsonObject { ["type"] = "ephemeral" },
             ["fallbacks"] = "default",
