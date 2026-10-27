@@ -9,3 +9,7 @@ public record CourseSummaryDto(Guid Id, string Title, DateTime UpdatedAt, string
 public record CourseDto(Guid Id, string Title, JsonElement Content, DateTime UpdatedAt, DateTime? LastExportedAt);
 
 public record CourseMediaDto(string Url);
+
+public record CourseAssistantRequest(JsonElement System, JsonElement Tools, JsonElement Messages);
+
+public record CourseMediaImportRequest(string Url);

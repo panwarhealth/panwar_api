@@ -157,12 +157,44 @@ public class AnthropicService : IAnthropicService
         return new AgentRunResult(answer, messages.ToJsonString(), inTokens, outTokens, toolCalls, hitMax);
     }
 
+    public async Task<JsonNode> CreateMessageAsync(MessageTurnRequest request, CancellationToken ct)
+    {
+        if (!IsEnabled) throw new AnthropicException("ANTHROPIC_API_KEY is not configured");
+
+        var tools = new JsonArray();
+        foreach (var tool in request.Tools.OfType<JsonObject>())
+        {
+            var copy = (JsonObject)tool.DeepClone();
+            copy["eager_input_streaming"] = true;
+            tools.Add(copy);
+        }
+
+        var body = new JsonObject
+        {
+            ["model"] = request.Model,
+            ["max_tokens"] = MaxTokens,
+            ["stream"] = true,
+            ["cache_control"] = new JsonObject { ["type"] = "ephemeral" },
+            ["fallbacks"] = "default",
+            ["system"] = request.System.DeepClone(),
+            ["thinking"] = new JsonObject { ["type"] = "adaptive", ["display"] = "summarized" },
+            ["output_config"] = new JsonObject { ["effort"] = request.Effort },
+            ["tools"] = tools,
+            ["messages"] = request.Messages.DeepClone(),
+        };
+
+        var http = _httpFactory.CreateClient();
+        http.Timeout = TimeSpan.FromMinutes(2);
+        return await SendStreamingAsync(http, body, "", null, ct, "server-side-fallback-2026-07-01");
+    }
+
     // Streams one Messages call (SSE), narrating progress, and reassembles the events
     // into the same JSON shape a non-streaming response would have: content blocks are
     // cloned from their start events (preserving unknown fields) with the accumulated
     // text / thinking / tool-input filled in at the end.
     private async Task<JsonNode> SendStreamingAsync(
-        HttpClient http, JsonObject body, string terminalToolName, Action<string>? onStatus, CancellationToken ct)
+        HttpClient http, JsonObject body, string terminalToolName, Action<string>? onStatus, CancellationToken ct,
+        string? beta = null)
     {
         using var req = new HttpRequestMessage(HttpMethod.Post, Endpoint)
         {
@@ -170,13 +202,14 @@ public class AnthropicService : IAnthropicService
         };
         req.Headers.Add("x-api-key", _apiKey);
         req.Headers.Add("anthropic-version", AnthropicVersion);
+        if (beta is not null) req.Headers.Add("anthropic-beta", beta);
 
         using var resp = await http.SendAsync(req, HttpCompletionOption.ResponseHeadersRead, ct);
         if (!resp.IsSuccessStatusCode)
         {
             var errBody = await resp.Content.ReadAsStringAsync(ct);
             _logger.LogError("Anthropic API {Status}: {Body}", (int)resp.StatusCode, errBody);
-            throw new AnthropicException($"Anthropic API returned {(int)resp.StatusCode}");
+            throw new AnthropicException($"Anthropic API returned {(int)resp.StatusCode}: {errBody[..Math.Min(errBody.Length, 400)]}");
         }
 
         var blocks = new SortedDictionary<int, JsonObject>();

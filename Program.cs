@@ -86,7 +86,10 @@ var host = new HostBuilder()
             .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler { AllowAutoRedirect = false });
         services.AddScoped<IUrlCheckService, UrlCheckService>();
         services.AddScoped<ILinkService, LinkService>();
+        services.AddHttpClient(CourseService.MediaDownloadClient, c => c.Timeout = TimeSpan.FromSeconds(90))
+            .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler { AllowAutoRedirect = false });
         services.AddScoped<ICourseService, CourseService>();
+        services.AddScoped<ICourseAssistantService, CourseAssistantService>();
 
         services.AddSingleton<IEdmMailSender, AcsEdmMailSender>();
         services.AddSingleton<IPublicAssetStore, PublicAssetStore>();

@@ -31,6 +31,13 @@ public sealed record AgentRunResult(
     int ToolCallCount,
     bool HitMaxIterations);
 
+public sealed record MessageTurnRequest(
+    string Model,
+    string Effort,
+    JsonNode System,
+    JsonArray Tools,
+    JsonArray Messages);
+
 public interface IAnthropicService
 {
     // False when no ANTHROPIC_API_KEY is configured - callers must no-op so the
@@ -43,4 +50,6 @@ public interface IAnthropicService
     // via the caller's executor) and ends by calling the terminal tool. Returns the
     // terminal answer plus the full transcript and usage for auditing.
     Task<AgentRunResult> RunToolLoopAsync(AgentRunRequest request, CancellationToken ct);
+
+    Task<JsonNode> CreateMessageAsync(MessageTurnRequest request, CancellationToken ct);
 }

@@ -12,13 +12,13 @@ public class CourseFunction
 {
     public const string CourseEditorRole = "course-editor";
     private static readonly string[] Roles = [CourseEditorRole, "panwar-admin"];
-    private const int MaxUploadBytes = 90 * 1024 * 1024;
-
     private readonly ICourseService _courses;
+    private readonly ICourseAssistantService _assistant;
 
-    public CourseFunction(ICourseService courses)
+    public CourseFunction(ICourseService courses, ICourseAssistantService assistant)
     {
         _courses = courses;
+        _assistant = assistant;
     }
 
     [Function("CourseList")]
@@ -59,10 +59,22 @@ public class CourseFunction
             using var ms = new MemoryStream();
             await req.Body.CopyToAsync(ms, ct);
             if (ms.Length == 0) throw new CourseValidationException("The file is empty");
-            if (ms.Length > MaxUploadBytes) throw new CourseValidationException("Uploads are limited to 90 MB");
+            if (ms.Length > CourseService.MaxMediaBytes) throw new CourseValidationException("Uploads are limited to 90 MB");
 
             return await req.JsonOrNotFoundAsync(await _courses.UploadMediaAsync(courseId, fileName, ms.ToArray(), ct));
         });
+
+    [Function("CourseImportMedia")]
+    public Task<HttpResponseData> ImportMedia(
+        [HttpTrigger(AuthorizationLevel.Anonymous, "post", Route = "courses/{courseId:guid}/media/import")] HttpRequestData req, FunctionContext context, Guid courseId)
+        => req.RunAsEmployeeAsync(context, Roles, async (_, ct) =>
+            await req.JsonOrNotFoundAsync(await _courses.ImportMediaAsync(courseId, (await req.ReadJsonAsync<CourseMediaImportRequest>()).Url, ct)));
+
+    [Function("CourseAssistant")]
+    public Task<HttpResponseData> Assistant(
+        [HttpTrigger(AuthorizationLevel.Anonymous, "post", Route = "courses/{courseId:guid}/assistant")] HttpRequestData req, FunctionContext context, Guid courseId)
+        => req.RunAsEmployeeAsync(context, Roles, async (_, ct) =>
+            await req.JsonOrNotFoundAsync(await _assistant.TakeTurnAsync(courseId, await req.ReadJsonAsync<CourseAssistantRequest>(), ct)));
 
     [Function("CourseGetMedia")]
     public Task<HttpResponseData> GetMedia(
