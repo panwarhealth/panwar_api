@@ -90,6 +90,7 @@ var host = new HostBuilder()
             .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler { AllowAutoRedirect = false });
         services.AddScoped<ICourseService, CourseService>();
         services.AddScoped<ICourseAssistantService, CourseAssistantService>();
+        services.AddSingleton<ICourseAssistantJobs, CourseAssistantJobs>();
 
         services.AddSingleton<IEdmMailSender, AcsEdmMailSender>();
         services.AddSingleton<IPublicAssetStore, PublicAssetStore>();

@@ -74,7 +74,15 @@ public class CourseFunction
     public Task<HttpResponseData> Assistant(
         [HttpTrigger(AuthorizationLevel.Anonymous, "post", Route = "courses/{courseId:guid}/assistant")] HttpRequestData req, FunctionContext context, Guid courseId)
         => req.RunAsEmployeeAsync(context, Roles, async (_, ct) =>
-            await req.JsonOrNotFoundAsync(await _assistant.TakeTurnAsync(courseId, await req.ReadJsonAsync<CourseAssistantRequest>(), ct)));
+            await _assistant.StartTurnAsync(courseId, await req.ReadJsonAsync<CourseAssistantRequest>(), ct) is { } jobId
+                ? await req.JsonAsync(new { jobId }, HttpStatusCode.Accepted)
+                : await req.NotFoundJsonAsync());
+
+    [Function("CourseAssistantTurn")]
+    public Task<HttpResponseData> AssistantTurn(
+        [HttpTrigger(AuthorizationLevel.Anonymous, "get", Route = "courses/{courseId:guid}/assistant/{jobId:guid}")] HttpRequestData req, FunctionContext context, Guid courseId, Guid jobId)
+        => req.RunAsEmployeeAsync(context, Roles, async (_, _) =>
+            await req.JsonAsync(_assistant.GetTurn(jobId) ?? new CourseAssistantJobState("unknown", null, null, null)));
 
     [Function("CourseGetMedia")]
     public Task<HttpResponseData> GetMedia(

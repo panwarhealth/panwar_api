@@ -157,7 +157,7 @@ public class AnthropicService : IAnthropicService
         return new AgentRunResult(answer, messages.ToJsonString(), inTokens, outTokens, toolCalls, hitMax);
     }
 
-    public async Task<JsonNode> CreateMessageAsync(MessageTurnRequest request, CancellationToken ct)
+    public async Task<JsonNode> CreateMessageAsync(MessageTurnRequest request, Action<string>? onStatus, CancellationToken ct)
     {
         if (!IsEnabled) throw new AnthropicException("ANTHROPIC_API_KEY is not configured");
 
@@ -185,7 +185,7 @@ public class AnthropicService : IAnthropicService
 
         var http = _httpFactory.CreateClient();
         http.Timeout = TimeSpan.FromMinutes(2);
-        return await SendStreamingAsync(http, body, "", null, ct, "server-side-fallback-2026-07-01");
+        return await SendStreamingAsync(http, body, "", onStatus, ct, "server-side-fallback-2026-07-01");
     }
 
     // Streams one Messages call (SSE), narrating progress, and reassembles the events

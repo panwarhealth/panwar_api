@@ -51,5 +51,5 @@ public interface IAnthropicService
     // terminal answer plus the full transcript and usage for auditing.
     Task<AgentRunResult> RunToolLoopAsync(AgentRunRequest request, CancellationToken ct);
 
-    Task<JsonNode> CreateMessageAsync(MessageTurnRequest request, CancellationToken ct);
+    Task<JsonNode> CreateMessageAsync(MessageTurnRequest request, Action<string>? onStatus, CancellationToken ct);
 }
