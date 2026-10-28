@@ -20,6 +20,7 @@ public class CourseAssistantService : ICourseAssistantService
 {
     private static readonly Dictionary<string, (decimal Input, decimal Output, decimal CacheRead, decimal CacheWrite)> PricePerMillion = new()
     {
+        ["claude-fable-5-1"] = (10m, 50m, 0.25m, 12.50m),
         ["claude-opus-5-5"] = (4m, 20m, 0.20m, 5m),
         ["claude-sonnet-5-5"] = (2m, 10m, 0.20m, 2.50m),
     };
