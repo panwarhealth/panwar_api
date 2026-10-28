@@ -38,3 +38,4 @@ Thumbs.db
 ## Secrets
 *.pfx
 secrets.json
+.ai-logs/

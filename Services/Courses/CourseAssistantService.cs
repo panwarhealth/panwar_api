@@ -32,6 +32,7 @@ public class CourseAssistantService : ICourseAssistantService
     private readonly ILogger<CourseAssistantService> _logger;
     private readonly string _model;
     private readonly string _effort;
+    private readonly string? _logDir;
 
     public CourseAssistantService(
         AppDbContext context,
@@ -48,6 +49,7 @@ public class CourseAssistantService : ICourseAssistantService
         _logger = logger;
         _model = configuration["COURSE_AI_MODEL"] ?? "claude-opus-5-5";
         _effort = configuration["COURSE_AI_EFFORT"] ?? "high";
+        _logDir = configuration["COURSE_AI_LOG_DIR"];
     }
 
     public async Task<Guid?> StartTurnAsync(Guid courseId, CourseAssistantRequest request, CancellationToken cancellationToken = default)
@@ -72,9 +74,18 @@ public class CourseAssistantService : ICourseAssistantService
         {
             using var scope = _scopeFactory.CreateScope();
             var anthropic = scope.ServiceProvider.GetRequiredService<IAnthropicService>();
-            var reply = await anthropic.CreateMessageAsync(turn, report, CancellationToken.None);
-            if (reply["usage"] is JsonObject usage) AddCost(courseId, usage);
-            return reply;
+            try
+            {
+                var reply = await anthropic.CreateMessageAsync(turn, report, CancellationToken.None);
+                if (reply["usage"] is JsonObject usage) AddCost(courseId, usage);
+                await WriteLogAsync(courseId, turn.Messages, reply, null);
+                return reply;
+            }
+            catch (Exception ex)
+            {
+                await WriteLogAsync(courseId, turn.Messages, null, ex.Message);
+                throw;
+            }
         });
     }
 
@@ -92,6 +103,32 @@ public class CourseAssistantService : ICourseAssistantService
         _logger.LogInformation(
             "Course assistant turn for {CourseId} on {Model}: {Input} in, {CacheRead} cache read, {CacheWrite} cache write, {Output} out, ${Cost}",
             courseId, _model, input, cacheRead, cacheWrite, output, cost);
+    }
+
+    private async Task WriteLogAsync(Guid courseId, JsonArray messages, JsonNode? reply, string? error)
+    {
+        if (string.IsNullOrWhiteSpace(_logDir)) return;
+        var entry = new JsonObject
+        {
+            ["at"] = DateTime.UtcNow.ToString("O"),
+            ["model"] = _model,
+            ["effort"] = _effort,
+            ["messages"] = messages.Count,
+            ["sent"] = messages[^1]?.DeepClone(),
+            ["stop_reason"] = reply?["stop_reason"]?.DeepClone(),
+            ["usage"] = reply?["usage"]?.DeepClone(),
+            ["reply"] = reply?["content"]?.DeepClone(),
+            ["error"] = error,
+        };
+        try
+        {
+            Directory.CreateDirectory(_logDir);
+            await File.AppendAllTextAsync(Path.Combine(_logDir, $"{courseId}.jsonl"), entry.ToJsonString() + "\n");
+        }
+        catch (IOException ex)
+        {
+            _logger.LogWarning(ex, "Couldn't write the course assistant log for {CourseId}", courseId);
+        }
     }
 
     public CourseAssistantJobState? GetTurn(Guid jobId) => _jobs.Get(jobId);
