@@ -8,6 +8,7 @@ using Microsoft.Extensions.Logging;
 using Npgsql;
 using Panwar.Api.Data;
 using Panwar.Api.Infrastructure.CloudflareR2;
+using Panwar.Api.Infrastructure.AssistantLog;
 using Panwar.Api.Infrastructure.PublicAssets;
 using Panwar.Api.Services;
 using Panwar.Api.Services.Ai;
@@ -91,6 +92,7 @@ var host = new HostBuilder()
         services.AddScoped<ICourseService, CourseService>();
         services.AddScoped<ICourseAssistantService, CourseAssistantService>();
         services.AddSingleton<ICourseAssistantJobs, CourseAssistantJobs>();
+        services.AddSingleton<IAssistantTurnLog, FileAssistantTurnLog>();
 
         services.AddSingleton<IEdmMailSender, AcsEdmMailSender>();
         services.AddSingleton<IPublicAssetStore, PublicAssetStore>();

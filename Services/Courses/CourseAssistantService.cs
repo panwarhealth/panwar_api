@@ -5,6 +5,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Panwar.Api.Data;
+using Panwar.Api.Infrastructure.AssistantLog;
 using Panwar.Api.Models.DTOs;
 using Panwar.Api.Services.Ai;
 
@@ -32,7 +33,7 @@ public class CourseAssistantService : ICourseAssistantService
     private readonly ILogger<CourseAssistantService> _logger;
     private readonly string _model;
     private readonly string _effort;
-    private readonly string? _logDir;
+    private readonly IAssistantTurnLog _turnLog;
 
     public CourseAssistantService(
         AppDbContext context,
@@ -40,6 +41,7 @@ public class CourseAssistantService : ICourseAssistantService
         ICourseAssistantJobs jobs,
         IServiceScopeFactory scopeFactory,
         ILogger<CourseAssistantService> logger,
+        IAssistantTurnLog turnLog,
         IConfiguration configuration)
     {
         _context = context;
@@ -49,7 +51,7 @@ public class CourseAssistantService : ICourseAssistantService
         _logger = logger;
         _model = configuration["COURSE_AI_MODEL"] ?? "claude-opus-5-5";
         _effort = configuration["COURSE_AI_EFFORT"] ?? "high";
-        _logDir = configuration["COURSE_AI_LOG_DIR"];
+        _turnLog = turnLog;
     }
 
     public async Task<Guid?> StartTurnAsync(Guid courseId, CourseAssistantRequest request, CancellationToken cancellationToken = default)
@@ -105,10 +107,8 @@ public class CourseAssistantService : ICourseAssistantService
             courseId, _model, input, cacheRead, cacheWrite, output, cost);
     }
 
-    private async Task WriteLogAsync(Guid courseId, JsonArray messages, JsonNode? reply, string? error)
-    {
-        if (string.IsNullOrWhiteSpace(_logDir)) return;
-        var entry = new JsonObject
+    private Task WriteLogAsync(Guid courseId, JsonArray messages, JsonNode? reply, string? error) =>
+        _turnLog.WriteAsync(courseId, new JsonObject
         {
             ["at"] = DateTime.UtcNow.ToString("O"),
             ["model"] = _model,
@@ -119,17 +119,7 @@ public class CourseAssistantService : ICourseAssistantService
             ["usage"] = reply?["usage"]?.DeepClone(),
             ["reply"] = reply?["content"]?.DeepClone(),
             ["error"] = error,
-        };
-        try
-        {
-            Directory.CreateDirectory(_logDir);
-            await File.AppendAllTextAsync(Path.Combine(_logDir, $"{courseId}.jsonl"), entry.ToJsonString() + "\n");
-        }
-        catch (IOException ex)
-        {
-            _logger.LogWarning(ex, "Couldn't write the course assistant log for {CourseId}", courseId);
-        }
-    }
+        });
 
     public CourseAssistantJobState? GetTurn(Guid jobId) => _jobs.Get(jobId);
 }
