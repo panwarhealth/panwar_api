@@ -35,6 +35,7 @@ public class CourseService : ICourseService
         [".jpeg"] = "image/jpeg",
         [".png"] = "image/png",
         [".gif"] = "image/gif",
+        [".webp"] = "image/webp",
         [".svg"] = "image/svg+xml",
         [".mp4"] = "video/mp4",
         [".mp3"] = "audio/mpeg",
