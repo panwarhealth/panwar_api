@@ -14,7 +14,7 @@ namespace Panwar.Api.Services.Courses;
 public interface ICourseAssistantService
 {
     Task<Guid?> StartTurnAsync(Guid courseId, CourseAssistantRequest request, CancellationToken cancellationToken = default);
-    CourseAssistantJobState? GetTurn(Guid jobId);
+    Task<CourseAssistantJobState?> GetTurnAsync(Guid jobId, CancellationToken cancellationToken = default);
 }
 
 public class CourseAssistantService : ICourseAssistantService
@@ -72,7 +72,7 @@ public class CourseAssistantService : ICourseAssistantService
             JsonNode.Parse(request.Tools.GetRawText())!.AsArray(),
             JsonNode.Parse(request.Messages.GetRawText())!.AsArray());
 
-        return _jobs.Start(async report =>
+        return await _jobs.StartAsync(async report =>
         {
             using var scope = _scopeFactory.CreateScope();
             var anthropic = scope.ServiceProvider.GetRequiredService<IAnthropicService>();
@@ -88,7 +88,7 @@ public class CourseAssistantService : ICourseAssistantService
                 await WriteLogAsync(courseId, turn.Messages, null, ex.Message);
                 throw;
             }
-        });
+        }, cancellationToken);
     }
 
     private void AddCost(Guid courseId, JsonObject usage)
@@ -121,5 +121,6 @@ public class CourseAssistantService : ICourseAssistantService
             ["error"] = error,
         });
 
-    public CourseAssistantJobState? GetTurn(Guid jobId) => _jobs.Get(jobId);
+    public Task<CourseAssistantJobState?> GetTurnAsync(Guid jobId, CancellationToken cancellationToken = default) =>
+        _jobs.GetAsync(jobId, cancellationToken);
 }

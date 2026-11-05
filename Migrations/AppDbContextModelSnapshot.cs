@@ -382,6 +382,39 @@ namespace Panwar.Api.Migrations
                     b.ToTable("course", "panwar_portals");
                 });
 
+            modelBuilder.Entity("Panwar.Api.Models.CourseAssistantJob", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Error")
+                        .HasColumnType("text");
+
+                    b.Property<string>("Message")
+                        .HasColumnType("text");
+
+                    b.Property<string>("Reply")
+                        .HasColumnType("jsonb");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CreatedAt");
+
+                    b.ToTable("course_assistant_job", "panwar_portals");
+                });
+
             modelBuilder.Entity("Panwar.Api.Models.CpdInvestment", b =>
                 {
                     b.Property<Guid>("Id")

@@ -1,5 +1,8 @@
-using System.Collections.Concurrent;
 using System.Text.Json.Nodes;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
+using Panwar.Api.Data;
+using Panwar.Api.Models;
 
 namespace Panwar.Api.Services.Courses;
 
@@ -7,45 +10,79 @@ public record CourseAssistantJobState(string Status, string? Message, JsonNode? 
 
 public interface ICourseAssistantJobs
 {
-    Guid Start(Func<Action<string>, Task<JsonNode>> work);
-    CourseAssistantJobState? Get(Guid jobId);
+    Task<Guid> StartAsync(Func<Action<string>, Task<JsonNode>> work, CancellationToken cancellationToken = default);
+    Task<CourseAssistantJobState?> GetAsync(Guid jobId, CancellationToken cancellationToken = default);
 }
 
 public class CourseAssistantJobs : ICourseAssistantJobs
 {
-    private static readonly TimeSpan MaxAge = TimeSpan.FromMinutes(30);
+    private const string Running = "running";
+    private static readonly TimeSpan MaxAge = TimeSpan.FromDays(1);
+    private static readonly TimeSpan Stalled = TimeSpan.FromMinutes(15);
+    private static readonly TimeSpan ProgressEvery = TimeSpan.FromSeconds(2);
 
-    private sealed record Entry(CourseAssistantJobState State, DateTime At);
+    private readonly IServiceScopeFactory _scopeFactory;
 
-    private readonly ConcurrentDictionary<Guid, Entry> _jobs = new();
-
-    public Guid Start(Func<Action<string>, Task<JsonNode>> work)
+    public CourseAssistantJobs(IServiceScopeFactory scopeFactory)
     {
-        Prune();
+        _scopeFactory = scopeFactory;
+    }
+
+    public async Task<Guid> StartAsync(Func<Action<string>, Task<JsonNode>> work, CancellationToken cancellationToken = default)
+    {
         var jobId = Guid.NewGuid();
-        Set(jobId, new CourseAssistantJobState("running", null, null, null));
+        var now = DateTime.UtcNow;
+        using (var scope = _scopeFactory.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+            await db.CourseAssistantJobs.Where(j => j.CreatedAt < now - MaxAge).ExecuteDeleteAsync(cancellationToken);
+            db.CourseAssistantJobs.Add(new CourseAssistantJob { Id = jobId, Status = Running, CreatedAt = now, UpdatedAt = now });
+            await db.SaveChangesAsync(cancellationToken);
+        }
+
         _ = Task.Run(async () =>
         {
+            var lastProgress = DateTime.MinValue;
             try
             {
-                var reply = await work(message => Set(jobId, new CourseAssistantJobState("running", message, null, null)));
-                Set(jobId, new CourseAssistantJobState("done", null, reply, null));
+                var reply = await work(message =>
+                {
+                    if (DateTime.UtcNow - lastProgress < ProgressEvery) return;
+                    lastProgress = DateTime.UtcNow;
+                    _ = FinishAsync(jobId, Running, message, null, null);
+                });
+                await FinishAsync(jobId, "done", null, reply.ToJsonString(), null);
             }
             catch (Exception ex)
             {
-                Set(jobId, new CourseAssistantJobState("failed", null, null, ex.Message));
+                await FinishAsync(jobId, "failed", null, null, ex.Message);
             }
         });
         return jobId;
     }
 
-    public CourseAssistantJobState? Get(Guid jobId) => _jobs.TryGetValue(jobId, out var e) ? e.State : null;
-
-    private void Set(Guid jobId, CourseAssistantJobState state) => _jobs[jobId] = new Entry(state, DateTime.UtcNow);
-
-    private void Prune()
+    public async Task<CourseAssistantJobState?> GetAsync(Guid jobId, CancellationToken cancellationToken = default)
     {
-        foreach (var stale in _jobs.Where(kv => kv.Value.At < DateTime.UtcNow - MaxAge).Select(kv => kv.Key).ToList())
-            _jobs.TryRemove(stale, out _);
+        using var scope = _scopeFactory.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        var job = await db.CourseAssistantJobs.AsNoTracking().FirstOrDefaultAsync(j => j.Id == jobId, cancellationToken);
+        if (job is null) return null;
+        if (job.Status == Running && job.UpdatedAt < DateTime.UtcNow - Stalled)
+            return new CourseAssistantJobState("failed", null, null, "The server stopped while working on this. Try again.");
+        return new CourseAssistantJobState(job.Status, job.Message, job.Reply is null ? null : JsonNode.Parse(job.Reply), job.Error);
+    }
+
+    private async Task FinishAsync(Guid jobId, string status, string? message, string? reply, string? error)
+    {
+        using var scope = _scopeFactory.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        await db.CourseAssistantJobs
+            .Where(j => j.Id == jobId && j.Status == Running)
+            .ExecuteUpdateAsync(s => s
+                .SetProperty(j => j.Status, status)
+                .SetProperty(j => j.Message, message)
+                .SetProperty(j => j.Reply, reply)
+                .SetProperty(j => j.Error, error)
+                .SetProperty(j => j.UpdatedAt, DateTime.UtcNow));
     }
 }
