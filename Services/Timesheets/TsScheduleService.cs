@@ -51,7 +51,7 @@ public class TsScheduleService : ITsScheduleService
             .ToListAsync(cancellationToken);
 
         var bookings = await _context.TsBookings.AsNoTracking()
-            .Where(b => b.StartDate <= end && b.EndDate >= start)
+            .Where(b => b.StartDate <= end && b.EndDate >= start && !b.Person.Archived)
             .OrderBy(b => b.StartDate).ThenBy(b => b.Job.Code)
             .Select(ToDto)
             .ToListAsync(cancellationToken);
