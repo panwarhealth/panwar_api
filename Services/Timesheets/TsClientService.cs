@@ -29,9 +29,9 @@ public class TsClientService : ITsClientService
         var clients = await _context.TsClients.AsNoTracking()
             .Where(c => !c.Archived)
             .OrderBy(c => c.Name)
-            .Select(c => new { Client = c, Codes = c.Jobs.Select(j => j.Code).ToList() })
             .ToListAsync(cancellationToken);
-        return clients.Select(c => ToDto(c.Client, c.Codes)).ToList();
+        var codes = await AllCodesAsync(cancellationToken);
+        return clients.Select(c => ToDto(c, codes)).ToList();
     }
 
     public async Task<TsClientDto> CreateAsync(TsClientWriteRequest data, CancellationToken cancellationToken = default)
@@ -40,7 +40,7 @@ public class TsClientService : ITsClientService
         await ApplyAsync(client, data, cancellationToken);
         _context.TsClients.Add(client);
         await _context.SaveChangesAsync(cancellationToken);
-        return ToDto(client, []);
+        return ToDto(client, await AllCodesAsync(cancellationToken));
     }
 
     public async Task<TsClientDto?> UpdateAsync(Guid clientId, TsClientWriteRequest data, CancellationToken cancellationToken = default)
@@ -49,9 +49,11 @@ public class TsClientService : ITsClientService
         if (client is null) return null;
         await ApplyAsync(client, data, cancellationToken);
         await _context.SaveChangesAsync(cancellationToken);
-        var codes = await _context.TsJobs.Where(j => j.ClientId == clientId).Select(j => j.Code).ToListAsync(cancellationToken);
-        return ToDto(client, codes);
+        return ToDto(client, await AllCodesAsync(cancellationToken));
     }
+
+    private async Task<List<string>> AllCodesAsync(CancellationToken cancellationToken)
+        => await _context.TsJobs.AsNoTracking().Select(j => j.Code).ToListAsync(cancellationToken);
 
     private async Task ApplyAsync(TsClient client, TsClientWriteRequest data, CancellationToken cancellationToken)
     {

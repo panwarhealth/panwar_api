@@ -127,8 +127,18 @@ public class TsJobService : ITsJobService
             .FirstOrDefaultAsync(cancellationToken);
         if (client.SuppliesOwnCodes || string.IsNullOrEmpty(client.CodePrefix)) return new TsNextCodeDto(null, last?.Label, last?.Color);
 
-        var codes = await _context.TsJobs.AsNoTracking().Where(j => j.ClientId == clientId).Select(j => j.Code).ToListAsync(cancellationToken);
-        return new TsNextCodeDto(TsJobCodes.Next(client.CodePrefix, codes), last?.Label, last?.Color);
+        var prefix = client.CodePrefix.ToUpperInvariant();
+        var coded = await _context.TsJobs.AsNoTracking()
+            .Where(j => j.Code.ToUpper().StartsWith(prefix))
+            .Select(j => new { j.Code, j.Title })
+            .ToListAsync(cancellationToken);
+        var highest = coded
+            .Where(j => TsJobCodes.Number(prefix, j.Code) is not null)
+            .MaxBy(j => TsJobCodes.Number(prefix, j.Code));
+        return new TsNextCodeDto(
+            TsJobCodes.Next(prefix, coded.Select(j => j.Code)),
+            highest is null ? last?.Label : highest.Code + " " + highest.Title,
+            last?.Color);
     }
 
     public async Task<TsJobDetailDto> CreateAsync(TsJobWriteRequest data, CancellationToken cancellationToken = default)

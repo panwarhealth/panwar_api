@@ -6,6 +6,12 @@ public static class TsJobCodes
 {
     private const int MinDigits = 4;
 
+    public static long? Number(string prefix, string code)
+    {
+        var match = Regex.Match(code, $"^{Regex.Escape(prefix)}([0-9]+)$", RegexOptions.IgnoreCase);
+        return match.Success ? long.Parse(match.Groups[1].Value) : null;
+    }
+
     public static string Next(string prefix, IEnumerable<string> existingCodes)
     {
         var pattern = new Regex($"^{Regex.Escape(prefix)}([0-9]+)$", RegexOptions.IgnoreCase);
