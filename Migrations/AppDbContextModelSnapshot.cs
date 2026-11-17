@@ -415,6 +415,61 @@ namespace Panwar.Api.Migrations
                     b.ToTable("course_assistant_job", "panwar_portals");
                 });
 
+            modelBuilder.Entity("Panwar.Api.Models.CoursePresence", b =>
+                {
+                    b.Property<Guid>("CourseId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("PageId")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<DateTime>("SeenAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("CourseId", "UserId");
+
+                    b.HasIndex("UserId");
+
+                    b.ToTable("course_presence", "panwar_portals");
+                });
+
+            modelBuilder.Entity("Panwar.Api.Models.CourseVersion", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Content")
+                        .IsRequired()
+                        .HasColumnType("jsonb");
+
+                    b.Property<Guid>("CourseId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("SavedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("SavedBy")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Title")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("SavedBy");
+
+                    b.HasIndex("CourseId", "SavedAt");
+
+                    b.ToTable("course_version", "panwar_portals");
+                });
+
             modelBuilder.Entity("Panwar.Api.Models.CpdInvestment", b =>
                 {
                     b.Property<Guid>("Id")
@@ -2776,6 +2831,44 @@ namespace Panwar.Api.Migrations
                     b.Navigation("Creator");
 
                     b.Navigation("Updater");
+                });
+
+            modelBuilder.Entity("Panwar.Api.Models.CoursePresence", b =>
+                {
+                    b.HasOne("Panwar.Api.Models.Course", "Course")
+                        .WithMany()
+                        .HasForeignKey("CourseId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("Panwar.Api.Models.AppUser", "User")
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Course");
+
+                    b.Navigation("User");
+                });
+
+            modelBuilder.Entity("Panwar.Api.Models.CourseVersion", b =>
+                {
+                    b.HasOne("Panwar.Api.Models.Course", "Course")
+                        .WithMany()
+                        .HasForeignKey("CourseId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("Panwar.Api.Models.AppUser", "Saver")
+                        .WithMany()
+                        .HasForeignKey("SavedBy")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Course");
+
+                    b.Navigation("Saver");
                 });
 
             modelBuilder.Entity("Panwar.Api.Models.CpdInvestment", b =>

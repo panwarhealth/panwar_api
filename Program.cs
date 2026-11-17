@@ -90,6 +90,8 @@ var host = new HostBuilder()
         services.AddHttpClient(CourseService.MediaDownloadClient, c => c.Timeout = TimeSpan.FromSeconds(90))
             .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler { AllowAutoRedirect = false });
         services.AddScoped<ICourseService, CourseService>();
+        services.AddScoped<ICourseHistoryService, CourseHistoryService>();
+        services.AddScoped<ICoursePresenceService, CoursePresenceService>();
         services.AddScoped<ICourseAssistantService, CourseAssistantService>();
         services.AddSingleton<ICourseAssistantJobs, CourseAssistantJobs>();
         services.AddSingleton<IAssistantTurnLog, FileAssistantTurnLog>();

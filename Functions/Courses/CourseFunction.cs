@@ -14,11 +14,19 @@ public class CourseFunction
     private static readonly string[] Roles = [CourseEditorRole, "panwar-admin"];
     private readonly ICourseService _courses;
     private readonly ICourseAssistantService _assistant;
+    private readonly ICourseHistoryService _history;
+    private readonly ICoursePresenceService _presence;
 
-    public CourseFunction(ICourseService courses, ICourseAssistantService assistant)
+    public CourseFunction(
+        ICourseService courses,
+        ICourseAssistantService assistant,
+        ICourseHistoryService history,
+        ICoursePresenceService presence)
     {
         _courses = courses;
         _assistant = assistant;
+        _history = history;
+        _presence = presence;
     }
 
     [Function("CourseList")]
@@ -48,6 +56,31 @@ public class CourseFunction
         [HttpTrigger(AuthorizationLevel.Anonymous, "delete", Route = "courses/{courseId:guid}")] HttpRequestData req, FunctionContext context, Guid courseId)
         => req.RunAsEmployeeAsync(context, Roles, async (_, ct) =>
             await _courses.DeleteAsync(courseId, System.Web.HttpUtility.ParseQueryString(req.Url.Query)["title"], ct) ?req.CreateResponse(HttpStatusCode.NoContent) : await req.NotFoundJsonAsync());
+
+    [Function("CourseVersions")]
+    public Task<HttpResponseData> Versions(
+        [HttpTrigger(AuthorizationLevel.Anonymous, "get", Route = "courses/{courseId:guid}/versions")] HttpRequestData req, FunctionContext context, Guid courseId)
+        => req.RunAsEmployeeAsync(context, Roles, async (_, ct) =>
+        {
+            var versions = await _history.ListAsync(courseId, ct);
+            return versions is null ? await req.NotFoundJsonAsync() : await req.JsonAsync(new { versions });
+        });
+
+    [Function("CourseRestoreVersion")]
+    public Task<HttpResponseData> RestoreVersion(
+        [HttpTrigger(AuthorizationLevel.Anonymous, "post", Route = "courses/{courseId:guid}/versions/{versionId:guid}/restore")] HttpRequestData req, FunctionContext context, Guid courseId, Guid versionId)
+        => req.RunAsEmployeeAsync(context, Roles, async (userId, ct) =>
+            await req.JsonOrNotFoundAsync(await _courses.RestoreAsync(courseId, versionId, userId, ct)));
+
+    [Function("CoursePresence")]
+    public Task<HttpResponseData> Presence(
+        [HttpTrigger(AuthorizationLevel.Anonymous, "post", Route = "courses/{courseId:guid}/presence")] HttpRequestData req, FunctionContext context, Guid courseId)
+        => req.RunAsEmployeeAsync(context, Roles, async (userId, ct) =>
+        {
+            var body = await req.ReadJsonAsync<CoursePresenceRequest>();
+            var people = await _presence.BeatAsync(courseId, userId, body.PageId, ct);
+            return people is null ? await req.NotFoundJsonAsync() : await req.JsonAsync(new { people });
+        });
 
     [Function("CourseMarkExported")]
     public Task<HttpResponseData> MarkExported(

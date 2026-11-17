@@ -55,6 +55,8 @@ public class AppDbContext : DbContext
     public DbSet<EdmCampaign> EdmCampaigns { get; set; } = null!;
     public DbSet<Course> Courses { get; set; } = null!;
     public DbSet<CourseAssistantJob> CourseAssistantJobs { get; set; } = null!;
+    public DbSet<CourseVersion> CourseVersions { get; set; } = null!;
+    public DbSet<CoursePresence> CoursePresences { get; set; } = null!;
     public DbSet<EdmRecipient> EdmRecipients { get; set; } = null!;
     public DbSet<TsClient> TsClients { get; set; } = null!;
     public DbSet<TsTask> TsTasks { get; set; } = null!;
@@ -375,6 +377,26 @@ public class AppDbContext : DbContext
             entity.HasOne(e => e.Creator).WithMany().HasForeignKey(e => e.CreatedBy).OnDelete(DeleteBehavior.Restrict);
             entity.HasOne(e => e.Updater).WithMany().HasForeignKey(e => e.UpdatedBy).OnDelete(DeleteBehavior.Restrict);
             entity.HasIndex(e => e.UpdatedAt);
+        });
+
+        modelBuilder.Entity<CourseVersion>(entity =>
+        {
+            entity.ToTable("course_version");
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Title).IsRequired().HasMaxLength(200);
+            entity.Property(e => e.Content).IsRequired().HasColumnType("jsonb");
+            entity.HasOne(e => e.Course).WithMany().HasForeignKey(e => e.CourseId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(e => e.Saver).WithMany().HasForeignKey(e => e.SavedBy).OnDelete(DeleteBehavior.Restrict);
+            entity.HasIndex(e => new { e.CourseId, e.SavedAt });
+        });
+
+        modelBuilder.Entity<CoursePresence>(entity =>
+        {
+            entity.ToTable("course_presence");
+            entity.HasKey(e => new { e.CourseId, e.UserId });
+            entity.Property(e => e.PageId).HasMaxLength(100);
+            entity.HasOne(e => e.Course).WithMany().HasForeignKey(e => e.CourseId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(e => e.User).WithMany().HasForeignKey(e => e.UserId).OnDelete(DeleteBehavior.Cascade);
         });
 
         modelBuilder.Entity<CourseAssistantJob>(entity =>

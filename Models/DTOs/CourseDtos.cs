@@ -6,6 +6,12 @@ public record CourseWriteRequest(string Title, JsonElement Content);
 
 public record CourseSummaryDto(Guid Id, string Title, DateTime UpdatedAt, string? UpdatedByName, DateTime? LastExportedAt);
 
+public record CourseVersionDto(Guid Id, DateTime SavedAt, string? SavedByName, string Title);
+
+public record CoursePresenceRequest(string? PageId);
+
+public record CoursePresenceDto(Guid UserId, string Name, string? PageId);
+
 public record CourseDto(Guid Id, string Title, JsonElement Content, DateTime UpdatedAt, DateTime? LastExportedAt);
 
 public record CourseMediaDto(string Url);

@@ -14,6 +14,7 @@ public interface ICourseService
     Task<CourseDto?> GetAsync(Guid id, CancellationToken cancellationToken = default);
     Task<CourseDto> CreateAsync(CourseWriteRequest request, Guid userId, CancellationToken cancellationToken = default);
     Task<CourseDto?> UpdateAsync(Guid id, CourseWriteRequest request, Guid userId, CancellationToken cancellationToken = default);
+    Task<CourseDto?> RestoreAsync(Guid id, Guid versionId, Guid userId, CancellationToken cancellationToken = default);
     Task<CourseDto?> MarkExportedAsync(Guid id, CancellationToken cancellationToken = default);
     Task<bool> DeleteAsync(Guid id, string? confirmTitle, CancellationToken cancellationToken = default);
     Task<CourseMediaDto?> UploadMediaAsync(Guid id, string fileName, byte[] bytes, CancellationToken cancellationToken = default);
@@ -49,12 +50,14 @@ public class CourseService : ICourseService
     private readonly AppDbContext _context;
     private readonly IPublicAssetStore _assets;
     private readonly IHttpClientFactory _httpFactory;
+    private readonly ICourseHistoryService _history;
 
-    public CourseService(AppDbContext context, IPublicAssetStore assets, IHttpClientFactory httpFactory)
+    public CourseService(AppDbContext context, IPublicAssetStore assets, IHttpClientFactory httpFactory, ICourseHistoryService history)
     {
         _context = context;
         _assets = assets;
         _httpFactory = httpFactory;
+        _history = history;
     }
 
     public async Task<IReadOnlyList<CourseSummaryDto>> ListAsync(CancellationToken cancellationToken = default)
@@ -94,8 +97,26 @@ public class CourseService : ICourseService
         var course = await _context.Courses.FirstOrDefaultAsync(c => c.Id == id, cancellationToken);
         if (course is null) return null;
 
-        course.Title = ValidTitle(request.Title);
-        course.Content = ValidContent(request.Content);
+        var title = ValidTitle(request.Title);
+        var content = ValidContent(request.Content);
+        await _history.SnapshotAsync(course, false, cancellationToken);
+        course.Title = title;
+        course.Content = content;
+        course.UpdatedBy = userId;
+        course.UpdatedAt = DateTime.UtcNow;
+        await _context.SaveChangesAsync(cancellationToken);
+        return ToDto(course);
+    }
+
+    public async Task<CourseDto?> RestoreAsync(Guid id, Guid versionId, Guid userId, CancellationToken cancellationToken = default)
+    {
+        var course = await _context.Courses.FirstOrDefaultAsync(c => c.Id == id, cancellationToken);
+        var version = await _history.GetAsync(id, versionId, cancellationToken);
+        if (course is null || version is null) return null;
+
+        await _history.SnapshotAsync(course, true, cancellationToken);
+        course.Title = version.Title;
+        course.Content = version.Content;
         course.UpdatedBy = userId;
         course.UpdatedAt = DateTime.UtcNow;
         await _context.SaveChangesAsync(cancellationToken);
