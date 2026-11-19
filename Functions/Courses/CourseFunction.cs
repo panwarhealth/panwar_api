@@ -95,6 +95,12 @@ public class CourseFunction
         [HttpTrigger(AuthorizationLevel.Anonymous, "post", Route = "courses/{courseId:guid}/build")] HttpRequestData req, FunctionContext context, Guid courseId)
         => req.RunAsEmployeeAsync(context, Roles, async (_, ct) => await req.JsonOrNotFoundAsync(await _courses.NextBuildAsync(courseId, ct)));
 
+    [Function("CourseCreateClinicalStudioCourse")]
+    public Task<HttpResponseData> CreateClinicalStudioCourse(
+        [HttpTrigger(AuthorizationLevel.Anonymous, "post", Route = "courses/{courseId:guid}/clinical-studio")] HttpRequestData req, FunctionContext context, Guid courseId)
+        => req.RunAsEmployeeAsync(context, Roles, async (userId, ct) =>
+            await req.JsonOrNotFoundAsync(await _publish.CreateLmsCourseAsync(courseId, await req.ReadJsonAsync<CourseClinicalStudioCreateRequest>(), userId, ct), System.Net.HttpStatusCode.Created));
+
     [Function("CourseSetClinicalStudioCourse")]
     public Task<HttpResponseData> SetClinicalStudioCourse(
         [HttpTrigger(AuthorizationLevel.Anonymous, "put", Route = "courses/{courseId:guid}/clinical-studio")] HttpRequestData req, FunctionContext context, Guid courseId)

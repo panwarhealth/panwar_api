@@ -18,6 +18,10 @@ public record CourseBuildDto(int Build);
 
 public record CourseClinicalStudioRequest(string? CourseId);
 
+public record CourseClinicalStudioCreateRequest(string Title, string ShortDescription, string LongDescription, string Difficulty);
+
+public record CourseClinicalStudioCreatedDto(Guid ClinicalStudioCourseId);
+
 public record CoursePublishStartRequest(string[] FilePaths);
 
 public record CoursePublishCompleteRequest(string UploadId, int TotalFiles, int Build, string? ConfirmCourseTitle);

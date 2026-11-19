@@ -9,12 +9,15 @@ namespace Panwar.Api.Services.Courses;
 
 public interface ICoursePublishService
 {
+    Task<CourseClinicalStudioCreatedDto?> CreateLmsCourseAsync(Guid id, CourseClinicalStudioCreateRequest request, Guid userId, CancellationToken cancellationToken = default);
     Task<JsonElement?> StartAsync(Guid id, CoursePublishStartRequest request, Guid userId, CancellationToken cancellationToken = default);
     Task<JsonElement?> CompleteAsync(Guid id, CoursePublishCompleteRequest request, Guid userId, CancellationToken cancellationToken = default);
 }
 
 public class CoursePublishService : ICoursePublishService
 {
+    private static readonly string[] Difficulties = ["Beginner", "Intermediate", "Advanced"];
+
     private readonly AppDbContext _context;
     private readonly IClinicalStudioPublisher _publisher;
 
@@ -22,6 +25,27 @@ public class CoursePublishService : ICoursePublishService
     {
         _context = context;
         _publisher = publisher;
+    }
+
+    public async Task<CourseClinicalStudioCreatedDto?> CreateLmsCourseAsync(Guid id, CourseClinicalStudioCreateRequest request, Guid userId, CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(request.Title)) throw new CourseValidationException("Give the course a title");
+        if (string.IsNullOrWhiteSpace(request.ShortDescription)) throw new CourseValidationException("Add a short description");
+        if (string.IsNullOrWhiteSpace(request.LongDescription)) throw new CourseValidationException("Add a long description");
+        if (!Difficulties.Contains(request.Difficulty)) throw new CourseValidationException("Pick a difficulty");
+
+        var course = await _context.Courses.FirstOrDefaultAsync(c => c.Id == id, cancellationToken);
+        if (course is null) return null;
+
+        var created = await _publisher.CreateCourseAsync(
+            new ClinicalStudioNewCourse(request.Title.Trim(), request.ShortDescription.Trim(), request.LongDescription.Trim(), request.Difficulty),
+            await NameAsync(userId, cancellationToken), cancellationToken);
+        if (created.ValueKind != JsonValueKind.Object || !created.TryGetProperty("id", out var lmsId) || !lmsId.TryGetGuid(out var target))
+            throw new CourseValidationException("Clinical Studio created the course but did not return its ID. Check Clinical Studio admin before trying again.");
+
+        course.ClinicalStudioCourseId = target;
+        await _context.SaveChangesAsync(cancellationToken);
+        return new CourseClinicalStudioCreatedDto(target);
     }
 
     public async Task<JsonElement?> StartAsync(Guid id, CoursePublishStartRequest request, Guid userId, CancellationToken cancellationToken = default)

@@ -8,12 +8,15 @@ using Panwar.Api.Shared.Extensions;
 
 namespace Panwar.Api.Infrastructure.ClinicalStudio;
 
+public record ClinicalStudioNewCourse(string Title, string ShortDescription, string LongDescription, string Difficulty);
+
 public record ClinicalStudioPackage(string UploadId, int TotalFiles, string Title, string Version, string? ConfirmCourseTitle);
 
 public class ClinicalStudioException(string message) : RequestValidationException(message);
 
 public interface IClinicalStudioPublisher
 {
+    Task<JsonElement> CreateCourseAsync(ClinicalStudioNewCourse course, string publishedBy, CancellationToken cancellationToken = default);
     Task<JsonElement> RequestUploadAsync(Guid lmsCourseId, IReadOnlyList<string> filePaths, string publishedBy, CancellationToken cancellationToken = default);
     Task<JsonElement> CompleteUploadAsync(Guid lmsCourseId, ClinicalStudioPackage package, string publishedBy, CancellationToken cancellationToken = default);
 }
@@ -32,6 +35,16 @@ public class ClinicalStudioPublisher : IClinicalStudioPublisher
         _http = http;
         _configuration = configuration;
     }
+
+    public Task<JsonElement> CreateCourseAsync(ClinicalStudioNewCourse course, string publishedBy, CancellationToken cancellationToken = default)
+        => PostAsync("manage/courses", new
+        {
+            title = course.Title,
+            shortDescription = course.ShortDescription,
+            longDescription = course.LongDescription,
+            category = "Standard",
+            difficulty = course.Difficulty,
+        }, publishedBy, cancellationToken);
 
     public Task<JsonElement> RequestUploadAsync(Guid lmsCourseId, IReadOnlyList<string> filePaths, string publishedBy, CancellationToken cancellationToken = default)
         => PostAsync($"manage/courses/{lmsCourseId}/scorm/upload-urls", new { filePaths }, publishedBy, cancellationToken);
