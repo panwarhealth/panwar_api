@@ -16,6 +16,7 @@ public interface ICourseService
     Task<CourseDto?> UpdateAsync(Guid id, CourseWriteRequest request, Guid userId, CancellationToken cancellationToken = default);
     Task<CourseDto?> RestoreAsync(Guid id, Guid versionId, Guid userId, CancellationToken cancellationToken = default);
     Task<CourseDto?> MarkExportedAsync(Guid id, CancellationToken cancellationToken = default);
+    Task<CourseBuildDto?> NextBuildAsync(Guid id, CancellationToken cancellationToken = default);
     Task<CourseDto?> SetClinicalStudioCourseAsync(Guid id, string? clinicalStudioCourseId, CancellationToken cancellationToken = default);
     Task<bool> DeleteAsync(Guid id, string? confirmTitle, CancellationToken cancellationToken = default);
     Task<CourseMediaDto?> UploadMediaAsync(Guid id, string fileName, byte[] bytes, CancellationToken cancellationToken = default);
@@ -132,6 +133,16 @@ public class CourseService : ICourseService
         course.LastExportedAt = DateTime.UtcNow;
         await _context.SaveChangesAsync(cancellationToken);
         return ToDto(course);
+    }
+
+    public async Task<CourseBuildDto?> NextBuildAsync(Guid id, CancellationToken cancellationToken = default)
+    {
+        var course = await _context.Courses.FirstOrDefaultAsync(c => c.Id == id, cancellationToken);
+        if (course is null) return null;
+
+        course.BuildNumber++;
+        await _context.SaveChangesAsync(cancellationToken);
+        return new CourseBuildDto(course.BuildNumber);
     }
 
     public async Task<CourseDto?> SetClinicalStudioCourseAsync(Guid id, string? clinicalStudioCourseId, CancellationToken cancellationToken = default)
@@ -268,6 +279,6 @@ public class CourseService : ICourseService
     private static CourseDto ToDto(Course c)
     {
         using var doc = JsonDocument.Parse(c.Content);
-        return new CourseDto(c.Id, c.Title, doc.RootElement.Clone(), c.UpdatedAt, c.LastExportedAt, c.ClinicalStudioCourseId);
+        return new CourseDto(c.Id, c.Title, doc.RootElement.Clone(), c.UpdatedAt, c.LastExportedAt, c.ClinicalStudioCourseId, c.PublishedBuild, c.PublishedVersion);
     }
 }

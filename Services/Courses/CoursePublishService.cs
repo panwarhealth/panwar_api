@@ -36,9 +36,15 @@ public class CoursePublishService : ICoursePublishService
     {
         if (string.IsNullOrWhiteSpace(request.UploadId)) throw new CourseValidationException("uploadId is required");
         if (await FindAsync(id, cancellationToken) is not { } course) return null;
+        if (request.Build < 1 || request.Build > course.BuildNumber) throw new CourseValidationException("That build number does not exist");
 
-        var package = new ClinicalStudioPackage(request.UploadId, request.TotalFiles, course.Title, course.UpdatedAt.ToString("o"), request.ConfirmCourseTitle);
-        return await _publisher.CompleteUploadAsync(Target(course), package, await NameAsync(userId, cancellationToken), cancellationToken);
+        var package = new ClinicalStudioPackage(request.UploadId, request.TotalFiles, course.Title, request.Build.ToString(), request.ConfirmCourseTitle);
+        var published = await _publisher.CompleteUploadAsync(Target(course), package, await NameAsync(userId, cancellationToken), cancellationToken);
+
+        int? version = published.ValueKind == JsonValueKind.Object && published.TryGetProperty("version", out var v) && v.ValueKind == JsonValueKind.Number && v.TryGetInt32(out var number) ? number : null;
+        await _context.Courses.Where(c => c.Id == id).ExecuteUpdateAsync(
+            s => s.SetProperty(c => c.PublishedBuild, request.Build).SetProperty(c => c.PublishedVersion, version), cancellationToken);
+        return published;
     }
 
     private Task<Course?> FindAsync(Guid id, CancellationToken cancellationToken)

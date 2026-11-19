@@ -90,6 +90,11 @@ public class CourseFunction
         [HttpTrigger(AuthorizationLevel.Anonymous, "post", Route = "courses/{courseId:guid}/exported")] HttpRequestData req, FunctionContext context, Guid courseId)
         => req.RunAsEmployeeAsync(context, Roles, async (_, ct) => await req.JsonOrNotFoundAsync(await _courses.MarkExportedAsync(courseId, ct)));
 
+    [Function("CourseNextBuild")]
+    public Task<HttpResponseData> NextBuild(
+        [HttpTrigger(AuthorizationLevel.Anonymous, "post", Route = "courses/{courseId:guid}/build")] HttpRequestData req, FunctionContext context, Guid courseId)
+        => req.RunAsEmployeeAsync(context, Roles, async (_, ct) => await req.JsonOrNotFoundAsync(await _courses.NextBuildAsync(courseId, ct)));
+
     [Function("CourseSetClinicalStudioCourse")]
     public Task<HttpResponseData> SetClinicalStudioCourse(
         [HttpTrigger(AuthorizationLevel.Anonymous, "put", Route = "courses/{courseId:guid}/clinical-studio")] HttpRequestData req, FunctionContext context, Guid courseId)

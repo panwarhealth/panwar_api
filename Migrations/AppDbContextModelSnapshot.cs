@@ -343,6 +343,9 @@ namespace Panwar.Api.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
 
+                    b.Property<int>("BuildNumber")
+                        .HasColumnType("integer");
+
                     b.Property<Guid?>("ClinicalStudioCourseId")
                         .HasColumnType("uuid");
 
@@ -360,6 +363,12 @@ namespace Panwar.Api.Migrations
 
                     b.Property<DateTime?>("LastExportedAt")
                         .HasColumnType("timestamp with time zone");
+
+                    b.Property<int?>("PublishedBuild")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("PublishedVersion")
+                        .HasColumnType("integer");
 
                     b.Property<string>("Title")
                         .IsRequired()
