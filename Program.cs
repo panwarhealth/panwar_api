@@ -7,6 +7,7 @@ using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Npgsql;
 using Panwar.Api.Data;
+using Panwar.Api.Infrastructure.ClinicalStudio;
 using Panwar.Api.Infrastructure.CloudflareR2;
 using Panwar.Api.Infrastructure.AssistantLog;
 using Panwar.Api.Infrastructure.PublicAssets;
@@ -92,6 +93,8 @@ var host = new HostBuilder()
         services.AddScoped<ICourseService, CourseService>();
         services.AddScoped<ICourseHistoryService, CourseHistoryService>();
         services.AddScoped<ICoursePresenceService, CoursePresenceService>();
+        services.AddSingleton<IClinicalStudioPublisher, ClinicalStudioPublisher>();
+        services.AddScoped<ICoursePublishService, CoursePublishService>();
         services.AddScoped<ICourseAssistantService, CourseAssistantService>();
         services.AddSingleton<ICourseAssistantJobs, CourseAssistantJobs>();
         services.AddSingleton<IAssistantTurnLog, FileAssistantTurnLog>();

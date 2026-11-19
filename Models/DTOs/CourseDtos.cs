@@ -12,7 +12,13 @@ public record CoursePresenceRequest(string? PageId);
 
 public record CoursePresenceDto(Guid UserId, string Name, string? PageId);
 
-public record CourseDto(Guid Id, string Title, JsonElement Content, DateTime UpdatedAt, DateTime? LastExportedAt);
+public record CourseDto(Guid Id, string Title, JsonElement Content, DateTime UpdatedAt, DateTime? LastExportedAt, Guid? ClinicalStudioCourseId);
+
+public record CourseClinicalStudioRequest(string? CourseId);
+
+public record CoursePublishStartRequest(string[] FilePaths);
+
+public record CoursePublishCompleteRequest(string UploadId, int TotalFiles, string? ConfirmCourseTitle);
 
 public record CourseMediaDto(string Url);
 

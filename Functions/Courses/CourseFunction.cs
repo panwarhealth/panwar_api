@@ -16,17 +16,20 @@ public class CourseFunction
     private readonly ICourseAssistantService _assistant;
     private readonly ICourseHistoryService _history;
     private readonly ICoursePresenceService _presence;
+    private readonly ICoursePublishService _publish;
 
     public CourseFunction(
         ICourseService courses,
         ICourseAssistantService assistant,
         ICourseHistoryService history,
-        ICoursePresenceService presence)
+        ICoursePresenceService presence,
+        ICoursePublishService publish)
     {
         _courses = courses;
         _assistant = assistant;
         _history = history;
         _presence = presence;
+        _publish = publish;
     }
 
     [Function("CourseList")]
@@ -86,6 +89,28 @@ public class CourseFunction
     public Task<HttpResponseData> MarkExported(
         [HttpTrigger(AuthorizationLevel.Anonymous, "post", Route = "courses/{courseId:guid}/exported")] HttpRequestData req, FunctionContext context, Guid courseId)
         => req.RunAsEmployeeAsync(context, Roles, async (_, ct) => await req.JsonOrNotFoundAsync(await _courses.MarkExportedAsync(courseId, ct)));
+
+    [Function("CourseSetClinicalStudioCourse")]
+    public Task<HttpResponseData> SetClinicalStudioCourse(
+        [HttpTrigger(AuthorizationLevel.Anonymous, "put", Route = "courses/{courseId:guid}/clinical-studio")] HttpRequestData req, FunctionContext context, Guid courseId)
+        => req.RunAsEmployeeAsync(context, Roles, async (_, ct) =>
+            await req.JsonOrNotFoundAsync(await _courses.SetClinicalStudioCourseAsync(courseId, (await req.ReadJsonAsync<CourseClinicalStudioRequest>()).CourseId, ct)));
+
+    [Function("CoursePublishStart")]
+    public Task<HttpResponseData> PublishStart(
+        [HttpTrigger(AuthorizationLevel.Anonymous, "post", Route = "courses/{courseId:guid}/publish")] HttpRequestData req, FunctionContext context, Guid courseId)
+        => req.RunAsEmployeeAsync(context, Roles, async (userId, ct) =>
+            await _publish.StartAsync(courseId, await req.ReadJsonAsync<CoursePublishStartRequest>(), userId, ct) is { } upload
+                ? await req.JsonAsync(upload)
+                : await req.NotFoundJsonAsync());
+
+    [Function("CoursePublishComplete")]
+    public Task<HttpResponseData> PublishComplete(
+        [HttpTrigger(AuthorizationLevel.Anonymous, "post", Route = "courses/{courseId:guid}/publish/complete")] HttpRequestData req, FunctionContext context, Guid courseId)
+        => req.RunAsEmployeeAsync(context, Roles, async (userId, ct) =>
+            await _publish.CompleteAsync(courseId, await req.ReadJsonAsync<CoursePublishCompleteRequest>(), userId, ct) is { } published
+                ? await req.JsonAsync(published)
+                : await req.NotFoundJsonAsync());
 
     [Function("CourseUploadMedia")]
     public Task<HttpResponseData> UploadMedia(
