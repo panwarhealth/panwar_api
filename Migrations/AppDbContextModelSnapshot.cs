@@ -364,6 +364,9 @@ namespace Panwar.Api.Migrations
                     b.Property<DateTime?>("LastExportedAt")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<DateTime?>("PublishedAt")
+                        .HasColumnType("timestamp with time zone");
+
                     b.Property<int?>("PublishedBuild")
                         .HasColumnType("integer");
 

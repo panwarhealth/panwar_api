@@ -67,7 +67,7 @@ public class CoursePublishService : ICoursePublishService
 
         int? version = published.ValueKind == JsonValueKind.Object && published.TryGetProperty("version", out var v) && v.ValueKind == JsonValueKind.Number && v.TryGetInt32(out var number) ? number : null;
         await _context.Courses.Where(c => c.Id == id).ExecuteUpdateAsync(
-            s => s.SetProperty(c => c.PublishedBuild, request.Build).SetProperty(c => c.PublishedVersion, version), cancellationToken);
+            s => s.SetProperty(c => c.PublishedBuild, request.Build).SetProperty(c => c.PublishedVersion, version).SetProperty(c => c.PublishedAt, DateTime.UtcNow), cancellationToken);
         return published;
     }
 

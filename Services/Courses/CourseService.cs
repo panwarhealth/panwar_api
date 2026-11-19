@@ -279,6 +279,6 @@ public class CourseService : ICourseService
     private static CourseDto ToDto(Course c)
     {
         using var doc = JsonDocument.Parse(c.Content);
-        return new CourseDto(c.Id, c.Title, doc.RootElement.Clone(), c.UpdatedAt, c.LastExportedAt, c.ClinicalStudioCourseId, c.PublishedBuild, c.PublishedVersion);
+        return new CourseDto(c.Id, c.Title, doc.RootElement.Clone(), c.UpdatedAt, c.LastExportedAt, c.ClinicalStudioCourseId, c.PublishedBuild, c.PublishedVersion, c.PublishedAt);
     }
 }

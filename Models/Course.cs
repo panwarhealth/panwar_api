@@ -14,6 +14,7 @@ public class Course
     public int BuildNumber { get; set; }
     public int? PublishedBuild { get; set; }
     public int? PublishedVersion { get; set; }
+    public DateTime? PublishedAt { get; set; }
 
     public AppUser Creator { get; set; } = null!;
     public AppUser Updater { get; set; } = null!;

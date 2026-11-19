@@ -12,7 +12,7 @@ public record CoursePresenceRequest(string? PageId);
 
 public record CoursePresenceDto(Guid UserId, string Name, string? PageId);
 
-public record CourseDto(Guid Id, string Title, JsonElement Content, DateTime UpdatedAt, DateTime? LastExportedAt, Guid? ClinicalStudioCourseId, int? PublishedBuild, int? PublishedVersion);
+public record CourseDto(Guid Id, string Title, JsonElement Content, DateTime UpdatedAt, DateTime? LastExportedAt, Guid? ClinicalStudioCourseId, int? PublishedBuild, int? PublishedVersion, DateTime? PublishedAt);
 
 public record CourseBuildDto(int Build);
 
